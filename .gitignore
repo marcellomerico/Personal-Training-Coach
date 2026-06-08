@@ -1,0 +1,51 @@
+# --- Node / TypeScript ---
+node_modules/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+.turbo/
+
+# --- Env & Secrets (NIEMALS committen) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+**/garmin-tokens*
+**/*token*.json
+
+# --- Python (Garmin-Connector-Service) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.python-version
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Datenbank / lokale Daten ---
+*.sqlite
+*.sqlite3
+pgdata/
+data/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# --- Docker ---
+docker-compose.override.yml
