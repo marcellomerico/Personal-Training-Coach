@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@ptc/config": "workspace:*",
+    "@ptc/connectors": "workspace:*",
     "@ptc/core": "workspace:*",
     "@ptc/db": "workspace:*",
+    "@ptc/ingest": "workspace:*",
     "pg-boss": "^10.1.5"
   },
   "devDependencies": {

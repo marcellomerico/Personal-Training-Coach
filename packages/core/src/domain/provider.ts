@@ -32,16 +32,22 @@ export interface RawRecord {
   payload: unknown;
 }
 
+export type ActivityType = 'run' | 'ride' | 'swim' | 'strength' | 'walk' | 'other';
+
 /** Normalisierte Aktivität – Analyse/UI arbeiten ausschließlich hierauf. */
 export interface NormalizedActivity {
   source: Provider;
   sourceExternalId: string;
-  type: 'run' | 'ride' | 'swim' | 'strength' | 'other';
+  type: ActivityType;
   startTime: Date;
+  timezone: string | null;
   durationSec: number;
   distanceM: number | null;
+  elevationGainM: number | null;
   avgHr: number | null;
   maxHr: number | null;
+  avgPowerW: number | null;
+  calories: number | null;
 }
 
 /** Normalisierte tägliche Gesundheitsmetrik (provider-übergreifend). */
@@ -50,12 +56,30 @@ export interface NormalizedDailyHealth {
   date: string; // ISO-Datum (YYYY-MM-DD)
   restingHr: number | null;
   hrv: number | null;
+  steps: number | null;
+  bodyBattery: number | null;
+  stressAvg: number | null;
+  weightKg: number | null;
+}
+
+/** Normalisierte Schlafnacht (Phasen-Granularität provider-abhängig). */
+export interface NormalizedSleep {
+  source: Provider;
+  date: string; // ISO-Datum (YYYY-MM-DD) der Aufwachnacht
+  sleepStart: Date | null;
+  sleepEnd: Date | null;
+  totalSleepSec: number | null;
+  deepSec: number | null;
+  lightSec: number | null;
+  remSec: number | null;
+  awakeSec: number | null;
   sleepScore: number | null;
 }
 
 export interface SyncResult {
   activities: NormalizedActivity[];
   dailyHealth: NormalizedDailyHealth[];
+  sleep: NormalizedSleep[];
   raw: RawRecord[];
 }
 

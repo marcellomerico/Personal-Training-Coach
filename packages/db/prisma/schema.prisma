@@ -64,6 +64,10 @@ model User {
   syncJobs         SyncJob[]
   sessions         Session[]
   telegramLinkTokens TelegramLinkToken[]
+  rawImports       RawImport[]
+  activities       Activity[]
+  dailyHealthMetrics DailyHealthMetric[]
+  sleepRecords     SleepRecord[]
 
   @@map("users")
 }
@@ -169,4 +173,109 @@ model SyncJob {
   @@index([userId])
   @@index([status, nextRetryAt])
   @@map("sync_jobs")
+}
+
+// --- Phase 2: Datenimport (Garmin primär) -------------------------------
+
+// Rohdaten-Staging: unveränderte Connector-Antworten für Audit/Reprocessing.
+model RawImport {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  providerAccountId String?   @map("provider_account_id")
+  source            Provider
+  entityType        String    @map("entity_type") // activity | health | sleep
+  sourceExternalId  String?   @map("source_external_id")
+  payload           Json
+  fetchedAt         DateTime  @default(now()) @map("fetched_at")
+  processedAt       DateTime? @map("processed_at")
+  processingError   String?   @map("processing_error")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entityType])
+  @@index([providerAccountId])
+  @@map("raw_imports")
+}
+
+// Normalisierte Trainingseinheit (provider-unabhängiges Schema).
+model Activity {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  providerAccountId String?   @map("provider_account_id")
+  source            Provider
+  sourceExternalId  String    @map("source_external_id")
+  type              String
+  startTime         DateTime  @map("start_time")
+  timezone          String?
+  durationSec       Int       @map("duration_sec")
+  distanceM         Float?    @map("distance_m")
+  elevationGainM    Float?    @map("elevation_gain_m")
+  avgHr             Int?      @map("avg_hr")
+  maxHr             Int?      @map("max_hr")
+  avgPowerW         Int?      @map("avg_power_w")
+  calories          Int?
+  perceivedExertion Int?      @map("perceived_exertion")
+  trainingLoad      Float?    @map("training_load")
+  rawImportId       String?   @map("raw_import_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, sourceExternalId])
+  @@index([userId, startTime])
+  @@index([providerAccountId])
+  @@map("activities")
+}
+
+// Tagesaggregierte Gesundheitswerte (HRV, Ruhepuls, Schritte, ...).
+model DailyHealthMetric {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  providerAccountId String?  @map("provider_account_id")
+  source            Provider
+  date              DateTime @db.Date
+  restingHr         Int?     @map("resting_hr")
+  hrv               Float?
+  steps             Int?
+  bodyBattery       Int?     @map("body_battery")
+  stressAvg         Int?     @map("stress_avg")
+  weightKg          Float?   @map("weight_kg")
+  // Provider-Spezialwerte ohne eigene Spalte (z. B. Spo2) als JSON.
+  extra             Json?
+  rawImportId       String?  @map("raw_import_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, source])
+  @@index([userId, date])
+  @@map("daily_health_metrics")
+}
+
+// Schlafdaten je Nacht.
+model SleepRecord {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  providerAccountId String?   @map("provider_account_id")
+  source            Provider
+  date              DateTime  @db.Date
+  sleepStart        DateTime? @map("sleep_start")
+  sleepEnd          DateTime? @map("sleep_end")
+  totalSleepSec     Int?      @map("total_sleep_sec")
+  deepSec           Int?      @map("deep_sec")
+  lightSec          Int?      @map("light_sec")
+  remSec            Int?      @map("rem_sec")
+  awakeSec          Int?      @map("awake_sec")
+  sleepScore        Int?      @map("sleep_score")
+  rawImportId       String?   @map("raw_import_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, source])
+  @@index([userId, date])
+  @@map("sleep_records")
 }

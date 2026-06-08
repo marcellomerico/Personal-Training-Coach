@@ -32,12 +32,18 @@ importers:
       '@ptc/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@ptc/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@ptc/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@ptc/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ptc/ingest':
+        specifier: workspace:*
+        version: link:../../packages/ingest
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -99,12 +105,18 @@ importers:
       '@ptc/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@ptc/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@ptc/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@ptc/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ptc/ingest':
+        specifier: workspace:*
+        version: link:../../packages/ingest
       pg-boss:
         specifier: ^10.1.5
         version: 10.4.2
@@ -130,6 +142,28 @@ importers:
       pino:
         specifier: ^9.5.0
         version: 9.14.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.20
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(tsx@4.22.4)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/connectors:
+    dependencies:
+      '@ptc/config':
+        specifier: workspace:*
+        version: link:../config
+      '@ptc/core':
+        specifier: workspace:*
+        version: link:../core
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -172,6 +206,31 @@ importers:
       prisma:
         specifier: ^5.22.0
         version: 5.22.0
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(tsx@4.22.4)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/ingest:
+    dependencies:
+      '@ptc/config':
+        specifier: workspace:*
+        version: link:../config
+      '@ptc/connectors':
+        specifier: workspace:*
+        version: link:../connectors
+      '@ptc/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ptc/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.20
       tsup:
         specifier: ^8.3.5
         version: 8.5.1(tsx@4.22.4)(typescript@5.9.3)
