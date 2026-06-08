@@ -1,4 +1,33 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
+
+/**
+ * Lädt die `.env` aus dem Monorepo-Root (erkennbar an pnpm-workspace.yaml),
+ * unabhängig vom aktuellen Arbeitsverzeichnis des jeweiligen Services.
+ * Bereits gesetzte Umgebungsvariablen werden NICHT überschrieben
+ * (CI/Prod-Env hat Vorrang).
+ */
+let dotenvLoaded = false;
+function ensureDotenv(): void {
+  if (dotenvLoaded) return;
+  dotenvLoaded = true;
+
+  let dir = process.cwd();
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, ".env");
+    if (existsSync(join(dir, "pnpm-workspace.yaml")) && existsSync(candidate)) {
+      loadDotenv({ path: candidate });
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // Zusätzlich ein evtl. lokales .env (cwd) zulassen.
+  loadDotenv();
+}
 
 /**
  * Zentrale Env-Validierung. Schlägt früh und laut fehl, wenn Pflichtwerte fehlen.
@@ -53,6 +82,7 @@ let cached: Env | null = null;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (cached) return cached;
+  if (source === process.env) ensureDotenv();
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues
