@@ -62,8 +62,40 @@ model User {
   profile          UserProfile?
   providerAccounts ProviderAccount[]
   syncJobs         SyncJob[]
+  sessions         Session[]
+  telegramLinkTokens TelegramLinkToken[]
 
   @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  // SHA-256-Hash des Session-Tokens (Klartext-Token lebt nur im httpOnly-Cookie).
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  userAgent String?  @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model TelegramLinkToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  // SHA-256-Hash des Link-Tokens (Einmal-Token, kurzlebig).
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("telegram_link_tokens")
 }
 
 model UserProfile {

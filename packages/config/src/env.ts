@@ -12,13 +12,26 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
 
   API_PORT: z.coerce.number().int().positive().default(3001),
+  // Basis-URL der API (z. B. für den Bot, der die API aufruft).
+  API_BASE_URL: z.string().url().default("http://localhost:3001"),
+  // Erlaubte Origins für CORS (kommasepariert), z. B. Web-App im Dev.
+  WEB_ORIGIN: z.string().default("http://localhost:3000"),
 
   // Verschlüsselung sensibler Felder (Tokens) at rest.
   ENCRYPTION_KEY: z.string().min(16).optional(),
   SESSION_SECRET: z.string().min(16).optional(),
+  // Cookie-Name der Session.
+  SESSION_COOKIE_NAME: z.string().default("ptc_session"),
+  // Session-Lebensdauer in Tagen.
+  SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
+
+  // Interner Shared-Secret-Key für Service-zu-Service-Calls (Bot -> API).
+  INTERNAL_API_KEY: z.string().optional(),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().optional(),
+  // Bot-Username (ohne @) für Deep-Links: https://t.me/<username>?start=<token>
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
 
   // LLM (Claude) – optional/abschaltbar
   ANTHROPIC_API_KEY: z.string().optional(),
