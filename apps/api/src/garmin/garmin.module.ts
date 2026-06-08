@@ -12,5 +12,6 @@ import { GarminService } from './garmin.service';
   imports: [AuthModule],
   controllers: [GarminController],
   providers: [GarminService],
+  exports: [GarminService],
 })
 export class GarminModule {}

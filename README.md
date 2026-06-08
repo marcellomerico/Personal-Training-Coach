@@ -43,15 +43,17 @@ cp .env.example .env   # mind. DATABASE_URL prüfen
 # 3) Datenbank-Schema migrieren
 pnpm --filter @ptc/db migrate
 
-# 4) Services starten (je eigenes Terminal)
-pnpm --filter @ptc/api dev        # API auf :3001
-pnpm --filter @ptc/worker dev     # Background-Worker (pg-boss)
-
-# 5) Garmin-Connector (Python, Stub-Modus)
-cd services/garmin-connector
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-GARMIN_STUB_MODE=true .venv/bin/python -m uvicorn app.main:app --port 8000
+# 4) Alle Dev-Services starten
+pnpm dev:all
 ```
+
+`pnpm dev:all` prüft Postgres, legt bei Bedarf die Python-venv für den
+Garmin-Connector an, startet Garmin-Connector, API und Worker und startet den
+Telegram-Bot nur, wenn `TELEGRAM_BOT_TOKEN` gesetzt ist. Bereits belegte Ports
+werden nicht beendet, sondern übersprungen.
+
+Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
+`pnpm dev:bot`.
 
 Import-Flow (nach Login): `POST /providers/garmin/connect` → `POST /sync/garmin` →
 Daten lesen via `GET /activities`, `GET /daily-health`, `GET /sleep`.

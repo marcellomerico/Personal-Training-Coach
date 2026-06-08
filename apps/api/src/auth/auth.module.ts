@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { InternalGuard } from './internal.guard';
 import { RolesGuard } from './roles.guard';
 import { SessionGuard } from './session.guard';
 
@@ -11,7 +12,7 @@ import { SessionGuard } from './session.guard';
  */
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, SessionGuard, RolesGuard],
-  exports: [AuthService, SessionGuard, RolesGuard],
+  providers: [AuthService, SessionGuard, RolesGuard, InternalGuard],
+  exports: [AuthService, SessionGuard, RolesGuard, InternalGuard],
 })
 export class AuthModule {}
