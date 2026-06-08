@@ -1,0 +1,24 @@
+{
+  "name": "@ptc/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsup src/index.ts --format esm --target node22 --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ptc/config": "workspace:*",
+    "@ptc/core": "workspace:*",
+    "@ptc/db": "workspace:*",
+    "pg-boss": "^10.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

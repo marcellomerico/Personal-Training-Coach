@@ -1,0 +1,11 @@
+{
+  "name": "@ptc/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'Web-App wird in Phase 4 (Next.js) implementiert.'",
+    "typecheck": "echo 'no-op (Phase 1 placeholder)'",
+    "build": "echo 'no-op (Phase 1 placeholder)'"
+  }
+}

@@ -1,0 +1,25 @@
+# Lokale/Always-on Infrastruktur. Auf der Free-Tier-VM identisch nutzbar.
+# Start: docker compose up -d
+# (Docker muss installiert sein – siehe README.)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ptc-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ptc
+      POSTGRES_PASSWORD: ptc
+      POSTGRES_DB: ptc
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ptc -d ptc"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

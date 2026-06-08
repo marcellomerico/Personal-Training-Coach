@@ -1,0 +1,140 @@
+// Prisma-Schema – Phase 1 (Grundgerüst & Auth).
+// Weitere Entities (activities, daily_health_metrics, ...) folgen in Phase 2+.
+// Siehe docs/data-model.md für das vollständige konzeptionelle Modell.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum Provider {
+  strava
+  garmin_official
+  garmin_unofficial
+}
+
+enum ProviderAccountStatus {
+  connected
+  expired
+  revoked
+  error
+}
+
+enum SyncJobType {
+  backfill
+  incremental
+  token_refresh
+  webhook
+}
+
+enum SyncJobStatus {
+  queued
+  running
+  success
+  failed
+}
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  passwordHash   String?    @map("password_hash")
+  role           UserRole   @default(user)
+  status         UserStatus @default(active)
+  telegramUserId BigInt?    @unique @map("telegram_user_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  deletedAt      DateTime?  @map("deleted_at")
+
+  profile          UserProfile?
+  providerAccounts ProviderAccount[]
+  syncJobs         SyncJob[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique @map("user_id")
+  displayName        String?  @map("display_name")
+  birthDate          DateTime? @map("birth_date")
+  sex                String?
+  heightCm           Int?     @map("height_cm")
+  weightKg           Float?   @map("weight_kg")
+  maxHr              Int?     @map("max_hr")
+  restingHrBaseline  Int?     @map("resting_hr_baseline")
+  hrvBaseline        Float?   @map("hrv_baseline")
+  timezone           String   @default("Europe/Berlin")
+  locale             String   @default("de")
+  goals              Json?
+  preferences        Json?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model ProviderAccount {
+  id             String                @id @default(cuid())
+  userId         String                @map("user_id")
+  provider       Provider
+  externalUserId String?               @map("external_user_id")
+  // Verschlüsselt at rest (App-Layer-Verschlüsselung, nie Klartext speichern/loggen).
+  accessToken    String?               @map("access_token")
+  refreshToken   String?               @map("refresh_token")
+  tokenExpiresAt DateTime?             @map("token_expires_at")
+  scopes         String?
+  status         ProviderAccountStatus @default(connected)
+  authMode       String?               @map("auth_mode")
+  // Verschlüsseltes JSON (z. B. Garmin-Session-Tokens des inoffiziellen Connectors).
+  secrets        String?
+  connectedAt    DateTime              @default(now()) @map("connected_at")
+  lastSyncAt     DateTime?             @map("last_sync_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncJobs SyncJob[]
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("provider_accounts")
+}
+
+model SyncJob {
+  id                String         @id @default(cuid())
+  userId            String         @map("user_id")
+  providerAccountId String?        @map("provider_account_id")
+  type              SyncJobType
+  status            SyncJobStatus  @default(queued)
+  rangeFrom         DateTime?      @map("range_from")
+  rangeTo           DateTime?      @map("range_to")
+  startedAt         DateTime?      @map("started_at")
+  finishedAt        DateTime?      @map("finished_at")
+  error             String?
+  stats             Json?
+  attempt           Int            @default(0)
+  nextRetryAt       DateTime?      @map("next_retry_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerAccount ProviderAccount? @relation(fields: [providerAccountId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status, nextRetryAt])
+  @@map("sync_jobs")
+}

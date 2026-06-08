@@ -1,0 +1,7 @@
+# Phase 2: vollständige Implementierung.
+# Vorgesehene Kern-Abhängigkeiten (Versionen werden in Phase 2 fixiert):
+# fastapi
+# uvicorn
+# garth
+# garminconnect
+# pydantic
