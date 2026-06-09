@@ -140,14 +140,14 @@ model ProviderAccount {
   userId         String                @map("user_id")
   provider       Provider
   externalUserId String?               @map("external_user_id")
-  // Verschlüsselt at rest (App-Layer-Verschlüsselung, nie Klartext speichern/loggen).
+  // Verschlüsselt at rest via @ptc/config (ptc:v1), nie Klartext speichern/loggen.
   accessToken    String?               @map("access_token")
   refreshToken   String?               @map("refresh_token")
   tokenExpiresAt DateTime?             @map("token_expires_at")
   scopes         String?
   status         ProviderAccountStatus @default(connected)
   authMode       String?               @map("auth_mode")
-  // Verschlüsseltes JSON (z. B. Garmin-Session-Tokens des inoffiziellen Connectors).
+  // Verschlüsseltes JSON via @ptc/config (z. B. Garmin-Session-Tokens des inoffiziellen Connectors).
   secrets        String?
   connectedAt    DateTime              @default(now()) @map("connected_at")
   lastSyncAt     DateTime?             @map("last_sync_at")

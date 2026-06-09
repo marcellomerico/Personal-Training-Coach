@@ -47,7 +47,7 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
 
   // Verschlüsselung sensibler Felder (Tokens) at rest.
-  ENCRYPTION_KEY: z.string().min(16).optional(),
+  ENCRYPTION_KEY: z.string().min(32).optional(),
   SESSION_SECRET: z.string().min(16).optional(),
   // Cookie-Name der Session.
   SESSION_COOKIE_NAME: z.string().default("ptc_session"),
