@@ -11,6 +11,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
+    "test": "turbo run test",
     "dev:all": "bash scripts/dev-all.sh",
     "dev:api": "turbo run dev --filter=@ptc/api",
     "dev:bot": "turbo run dev --filter=@ptc/bot",

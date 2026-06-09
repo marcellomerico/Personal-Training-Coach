@@ -1,6 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { decisionText, summarizeReadiness, type ReadinessDecision } from '@ptc/analysis';
 import { PrismaService } from '../prisma/prisma.service';
 import { GarminService } from '../garmin/garmin.service';
+
+export interface BotReadinessSummary {
+  score: number;
+  decision: string;
+  decisionText: string;
+  summary: string;
+}
 
 export interface BotUserRef {
   id: string;
@@ -25,6 +33,7 @@ export interface BotTodayResponse {
     awakeSec: number | null;
   } | null;
   latestActivity: BotActivitySummary | null;
+  readiness: BotReadinessSummary | null;
 }
 
 export interface BotActivitySummary {
@@ -45,7 +54,7 @@ export class BotApiService {
 
   async today(telegramUserIdRaw: string): Promise<BotTodayResponse> {
     const user = await this.resolveTelegramUser(telegramUserIdRaw);
-    const [health, sleep, latestActivity] = await Promise.all([
+    const [health, sleep, latestActivity, readiness] = await Promise.all([
       this.prisma.dailyHealthMetric.findFirst({
         where: { userId: user.id },
         orderBy: { date: 'desc' },
@@ -57,6 +66,10 @@ export class BotApiService {
       this.prisma.activity.findFirst({
         where: { userId: user.id },
         orderBy: { startTime: 'desc' },
+      }),
+      this.prisma.readinessMetric.findFirst({
+        where: { userId: user.id },
+        orderBy: { date: 'desc' },
       }),
     ]);
 
@@ -89,6 +102,14 @@ export class BotApiService {
             distanceM: latestActivity.distanceM,
             avgHr: latestActivity.avgHr,
             calories: latestActivity.calories,
+          }
+        : null,
+      readiness: readiness
+        ? {
+            score: readiness.readinessScore,
+            decision: readiness.decision,
+            decisionText: decisionText(readiness.decision as ReadinessDecision),
+            summary: summarizeReadiness(readiness.rationale),
           }
         : null,
     };

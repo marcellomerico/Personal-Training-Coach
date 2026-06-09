@@ -8,6 +8,7 @@ import {
   getActivities,
   getDailyHealth,
   getHealth,
+  getLatestReadiness,
   getMe,
   getSleep,
   logout,
@@ -17,6 +18,8 @@ import { fmtDate, fmtDateTime, fmtDistance, fmtDuration, fmtNum } from '@/lib/fo
 import type {
   Activity,
   DailyHealthMetric,
+  ReadinessDecision,
+  ReadinessMetric,
   SafeUser,
   SleepRecord,
   SyncStats,
@@ -30,6 +33,7 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [health, setHealth] = useState<DailyHealthMetric[]>([]);
   const [sleep, setSleep] = useState<SleepRecord[]>([]);
+  const [readiness, setReadiness] = useState<ReadinessMetric | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -38,14 +42,16 @@ export default function DashboardPage() {
   const [connecting, setConnecting] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [a, h, s] = await Promise.all([
+    const [a, h, s, r] = await Promise.all([
       getActivities(10),
       getDailyHealth(7),
       getSleep(7),
+      getLatestReadiness(),
     ]);
     setActivities(a);
     setHealth(h);
     setSleep(s);
+    setReadiness(r);
   }, []);
 
   // Auth-Gate + Initialdaten.
@@ -169,6 +175,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Readiness / Tagesbewertung */}
+        <ReadinessCard readiness={readiness} />
+
         {/* Letzte Aktivität */}
         <div className="card">
           <div className="card-title">Letzte Aktivität</div>
@@ -237,6 +246,76 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="metric">
       <div className="label">{label}</div>
       <div className="value">{value}</div>
+    </div>
+  );
+}
+
+// Darstellung der Entscheidung (reine UI – Logik liegt im Analysis-Engine).
+const DECISION_LABEL: Record<ReadinessDecision, string> = {
+  rest: 'Ruhetag',
+  easy: 'Locker',
+  normal: 'Normal',
+  hard: 'Hart möglich',
+};
+
+const DECISION_COLOR: Record<ReadinessDecision, string> = {
+  rest: '#dc2626',
+  easy: '#f59e0b',
+  normal: '#16a34a',
+  hard: '#2563eb',
+};
+
+/** Kurze Begründung: die stärksten negativen Beiträge aus der rationale. */
+function readinessSummary(readiness: ReadinessMetric): string {
+  const negatives = readiness.rationale.rules
+    .filter((r) => r.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 2)
+    .map((r) => r.label);
+  return negatives.length > 0 ? negatives.join(' ') : 'Alle Werte im grünen Bereich.';
+}
+
+function ReadinessCard({ readiness }: { readiness: ReadinessMetric | null }) {
+  if (!readiness) {
+    return (
+      <div className="card">
+        <div className="card-title">Readiness</div>
+        <p className="muted">Noch keine Bewertung berechnet – Sync starten.</p>
+      </div>
+    );
+  }
+
+  const color = DECISION_COLOR[readiness.decision];
+  return (
+    <div className="card">
+      <div className="card-title">Readiness · {fmtDate(readiness.date)}</div>
+      <div className="row" style={{ alignItems: 'center', gap: 20, marginBottom: 12 }}>
+        <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1, color }}>
+          {readiness.readinessScore}
+          <span className="muted" style={{ fontSize: 16, fontWeight: 400 }}>
+            {' '}
+            / 100
+          </span>
+        </div>
+        <span
+          style={{
+            padding: '4px 12px',
+            borderRadius: 999,
+            background: color,
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          {DECISION_LABEL[readiness.decision]}
+        </span>
+      </div>
+      <p className="muted" style={{ marginBottom: 6 }}>
+        {readinessSummary(readiness)}
+      </p>
+      <p className="muted" style={{ fontSize: 12 }}>
+        {readiness.rationale.note}
+      </p>
     </div>
   );
 }

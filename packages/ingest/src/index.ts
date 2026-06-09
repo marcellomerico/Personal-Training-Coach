@@ -1,6 +1,9 @@
 import type { Logger } from '@ptc/config';
 import type { ProviderAccount, SourceConnector, SyncResult } from '@ptc/core';
 import { type PrismaClient, type Provider } from '@ptc/db';
+import { computeAndStoreReadiness } from './readiness';
+
+export { computeAndStoreReadiness } from './readiness';
 
 export interface SyncContext {
   userId: string;
@@ -183,6 +186,14 @@ export async function runGarminSync(
     await prisma.providerAccount
       .update({ where: { id: providerAccountId }, data: { lastSyncAt: new Date() } })
       .catch(() => undefined);
+  }
+
+  // 6) Readiness für den aktuellen Tag berechnen (deterministisch, kein LLM).
+  // Optional: ein Fehler hier darf den Sync nicht scheitern lassen.
+  try {
+    await computeAndStoreReadiness(prisma, ctx.userId, null, logger);
+  } catch (err) {
+    logger?.error({ err, userId: ctx.userId }, 'Readiness-Berechnung nach Sync fehlgeschlagen');
   }
 
   const stats: SyncStats = {

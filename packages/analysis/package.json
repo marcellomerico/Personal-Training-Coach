@@ -1,5 +1,5 @@
 {
-  "name": "@ptc/ingest",
+  "name": "@ptc/analysis",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -16,18 +16,13 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@ptc/analysis": "workspace:*",
-    "@ptc/config": "workspace:*",
-    "@ptc/connectors": "workspace:*",
-    "@ptc/core": "workspace:*",
-    "@ptc/db": "workspace:*"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "tsup": "^8.3.5",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
   }
 }

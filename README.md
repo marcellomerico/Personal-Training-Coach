@@ -65,6 +65,36 @@ Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
 Import-Flow (nach Login): `POST /providers/garmin/connect` → `POST /sync/garmin` →
 Daten lesen via `GET /activities`, `GET /daily-health`, `GET /sleep`.
 
+## Readiness / Coach-MVP (Phase 5)
+
+Nach jedem Garmin-Sync berechnet das System automatisch eine **Tagesbewertung**
+(Readiness) für den jüngsten Datentag und speichert sie (`readiness_metrics`).
+Die Berechnung ist **deterministisch und regelbasiert** (Package `@ptc/analysis`,
+kein LLM): schlechter Schlaf, HRV unter Baseline, erhöhter Ruhepuls und eine harte
+Einheit am Vortag senken den Score (0–100). Daraus folgt eine Entscheidung
+(`rest`/`easy`/`normal`/`hard`) plus eine strukturierte, nachvollziehbare
+`rationale` (Inputs + Regel-Beiträge).
+
+API (user-scoped, SessionGuard): `GET /readiness/latest`,
+`POST /analysis/readiness/recompute`. Dashboard und Telegram-`/today` zeigen die
+Bewertung an, falls vorhanden.
+
+> ⚠️ **Kein medizinischer Rat.** Das ist eine grobe v0-Heuristik zur Orientierung;
+> Schwellwerte und Baselines werden später verfeinert.
+
+## Qualitätschecks
+
+```bash
+pnpm run lint
+pnpm run typecheck
+pnpm run build
+pnpm run test
+```
+
+Aktuell testet `pnpm run test` die deterministische Readiness-Engine im Package
+`@ptc/analysis` (guter Tag, schlechter Tag, Baselines, Sleep-Fallback,
+Entscheidungsgrenzen und Begründungs-Summary).
+
 ## Hinweise
 
 - Sensible Daten (Gesundheitsdaten, Tokens) werden verschlüsselt behandelt; niemals Secrets committen.

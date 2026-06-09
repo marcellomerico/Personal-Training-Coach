@@ -32,6 +32,12 @@ interface BotTodayResponse {
     awakeSec: number | null;
   } | null;
   latestActivity: BotActivitySummary | null;
+  readiness: {
+    score: number;
+    decision: string;
+    decisionText: string;
+    summary: string;
+  } | null;
 }
 
 interface BotActivitySummary {
@@ -160,8 +166,18 @@ function formatToday(data: BotTodayResponse): string {
       ].join("\n")
     : "Noch keine Schlafdaten importiert.";
 
+  const readiness = data.readiness
+    ? [
+        `Score: ${data.readiness.score}/100 (${data.readiness.decisionText})`,
+        data.readiness.summary,
+      ].join("\n")
+    : "Noch keine Bewertung berechnet - /sync starten.";
+
   return [
     `Tagesstatus fuer ${name}`,
+    "",
+    "Readiness",
+    readiness,
     "",
     "Gesundheit",
     health,

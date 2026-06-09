@@ -2,6 +2,7 @@ import type {
   Activity,
   DailyHealthMetric,
   HealthStatus,
+  ReadinessMetric,
   SafeUser,
   SleepRecord,
   SyncStats,
@@ -109,4 +110,11 @@ export function getDailyHealth(limit = 7): Promise<DailyHealthMetric[]> {
 
 export function getSleep(limit = 7): Promise<SleepRecord[]> {
   return request(`/sleep?limit=${limit}`);
+}
+
+// --- Readiness -------------------------------------------------------------
+
+/** Zuletzt berechnete Tagesbewertung (oder null, wenn noch keine vorhanden). */
+export function getLatestReadiness(): Promise<ReadinessMetric | null> {
+  return request('/readiness/latest');
 }

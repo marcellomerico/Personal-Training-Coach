@@ -49,6 +49,7 @@ Thumbs.db
 *.swp
 
 # --- Local AI-agent artifacts ---
+.claude/
 .agents/
 skills-lock.json
 CLAUDE.md

@@ -64,3 +64,34 @@ export interface HealthStatus {
   service: string;
   time: string;
 }
+
+export type ReadinessDecision = 'rest' | 'easy' | 'normal' | 'hard';
+
+export interface ReadinessRuleContribution {
+  rule: string;
+  label: string;
+  value: number | null;
+  baseline: number | null;
+  delta: number;
+}
+
+export interface ReadinessRationale {
+  baseScore: number;
+  finalScore: number;
+  rules: ReadinessRuleContribution[];
+  note: string;
+}
+
+export interface ReadinessMetric {
+  id: string;
+  date: string;
+  readinessScore: number;
+  hrvVsBaseline: number | null;
+  rhrVsBaseline: number | null;
+  sleepFactor: number | null;
+  loadSignal: number | null;
+  decision: ReadinessDecision;
+  rationale: ReadinessRationale;
+  computedAt: string;
+  engineVersion: string;
+}

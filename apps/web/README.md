@@ -9,9 +9,11 @@ REST-Endpunkte. Kein eigenes Backend, keine Server-seitigen DB-Zugriffe.
 ## Seiten
 
 - `/login`, `/register` – Auth (Register/Login/Logout, Fehleranzeige)
-- `/dashboard` – nur für eingeloggte Nutzer: Status, letzte Aktivität,
-  Health-Werte (HRV, Ruhepuls, Body Battery, Stress, Schritte), Schlaf
-  (Dauer, Sleep Score, Tief/REM/Wach), Buttons „Garmin verbinden" / „Sync"
+- `/dashboard` – nur für eingeloggte Nutzer: Status, Readiness-Karte
+  (Score 0–100, Entscheidung, kurze Begründung – Phase 5; Hinweis, falls noch
+  keine Bewertung berechnet wurde), letzte Aktivität, Health-Werte (HRV,
+  Ruhepuls, Body Battery, Stress, Schritte), Schlaf (Dauer, Sleep Score,
+  Tief/REM/Wach), Buttons „Garmin verbinden" / „Sync"
 - `/` – leitet je nach Login-Status auf `/dashboard` oder `/login`
 
 ## Entwicklung

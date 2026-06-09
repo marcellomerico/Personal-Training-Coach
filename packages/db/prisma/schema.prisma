@@ -48,6 +48,15 @@ enum SyncJobStatus {
   failed
 }
 
+// Trainings-/Erholungsempfehlung des Readiness-Engines (Phase 5).
+// Bewusst getrennt vom Coach-Typ DailyDecision ('moderate'); hier 'normal'.
+enum ReadinessDecision {
+  rest
+  easy
+  normal
+  hard
+}
+
 model User {
   id             String     @id @default(cuid())
   email          String     @unique
@@ -68,6 +77,7 @@ model User {
   activities       Activity[]
   dailyHealthMetrics DailyHealthMetric[]
   sleepRecords     SleepRecord[]
+  readinessMetrics ReadinessMetric[]
 
   @@map("users")
 }
@@ -278,4 +288,34 @@ model SleepRecord {
   @@unique([userId, date, source])
   @@index([userId, date])
   @@map("sleep_records")
+}
+
+// --- Phase 5: Readiness / Coach-MVP -------------------------------------
+
+// Deterministische Tagesbewertung aus Health-/Schlaf-/Aktivitätsdaten.
+// REGELBASIERT (kein LLM); `rationale` hält Inputs + Regel-Beiträge für
+// Nachvollziehbarkeit. Hinweis: KEIN medizinischer Rat (v0-Heuristik).
+model ReadinessMetric {
+  id             String            @id @default(cuid())
+  userId         String            @map("user_id")
+  date           DateTime          @db.Date
+  // 0–100; höher = erholter/belastbarer.
+  readinessScore Int               @map("readiness_score")
+  // Verhältnisse zur Baseline (z. B. 0.85 = 15 % unter Baseline); null wenn Datum fehlt.
+  hrvVsBaseline  Float?            @map("hrv_vs_baseline")
+  rhrVsBaseline  Float?            @map("rhr_vs_baseline")
+  // 0–1: Schlaf-Güte (aus Sleep-Score bzw. Dauer abgeleitet).
+  sleepFactor    Float?            @map("sleep_factor")
+  // 0–1: Belastungssignal des Vortages (0 = keine, 1 = harte Einheit).
+  loadSignal     Float?            @map("load_signal")
+  decision       ReadinessDecision
+  rationale      Json
+  computedAt     DateTime          @default(now()) @map("computed_at")
+  engineVersion  String            @map("engine_version")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("readiness_metrics")
 }
