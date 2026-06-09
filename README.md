@@ -43,8 +43,11 @@ cp .env.example .env   # mind. DATABASE_URL prüfen
 # 3) Datenbank-Schema migrieren
 pnpm --filter @ptc/db migrate
 
-# 4) Alle Dev-Services starten
+# 4) Backend-Services starten (API, Garmin-Connector, Worker)
 pnpm dev:all
+
+# 5) Web-App starten (separates Terminal)
+pnpm dev:web
 ```
 
 `pnpm dev:all` prüft Postgres, legt bei Bedarf die Python-venv für den
@@ -52,8 +55,12 @@ Garmin-Connector an, startet Garmin-Connector, API und Worker und startet den
 Telegram-Bot nur, wenn `TELEGRAM_BOT_TOKEN` gesetzt ist. Bereits belegte Ports
 werden nicht beendet, sondern übersprungen.
 
+`pnpm dev:web` startet die Next.js-Web-App (Phase 4 MVP) auf
+**http://localhost:3000** – dort registrieren/einloggen, Garmin (Stub)
+verbinden und syncen, Dashboard mit letzter Aktivität, Health- und Schlafdaten.
+
 Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
-`pnpm dev:bot`.
+`pnpm dev:bot`, `pnpm dev:web`.
 
 Import-Flow (nach Login): `POST /providers/garmin/connect` → `POST /sync/garmin` →
 Daten lesen via `GET /activities`, `GET /daily-health`, `GET /sleep`.

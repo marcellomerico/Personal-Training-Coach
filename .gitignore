@@ -48,5 +48,10 @@ Thumbs.db
 !.vscode/extensions.json
 *.swp
 
+# --- Local AI-agent artifacts ---
+.agents/
+skills-lock.json
+CLAUDE.md
+
 # --- Docker ---
 docker-compose.override.yml

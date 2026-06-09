@@ -1,6 +1,28 @@
-# @ptc/web (Platzhalter)
+# @ptc/web
 
-Die Web-App (Next.js) wird in **Phase 4 (Web-App MVP)** implementiert.
-Siehe `docs/mvp-roadmap.md` und `docs/architecture.md` §6.
+Web-App MVP (Phase 4) – Next.js (App Router, TypeScript).
 
-Vorgesehen: Onboarding, Dashboard „Today", Aktivitätsliste/-detail; Zugriff via Tailscale.
+Reiner Client für die NestJS-API (`@ptc/api`): Auth via httpOnly-Session-Cookie
+(Cross-Origin mit `credentials: "include"`), Daten über die bestehenden
+REST-Endpunkte. Kein eigenes Backend, keine Server-seitigen DB-Zugriffe.
+
+## Seiten
+
+- `/login`, `/register` – Auth (Register/Login/Logout, Fehleranzeige)
+- `/dashboard` – nur für eingeloggte Nutzer: Status, letzte Aktivität,
+  Health-Werte (HRV, Ruhepuls, Body Battery, Stress, Schritte), Schlaf
+  (Dauer, Sleep Score, Tief/REM/Wach), Buttons „Garmin verbinden" / „Sync"
+- `/` – leitet je nach Login-Status auf `/dashboard` oder `/login`
+
+## Entwicklung
+
+```bash
+pnpm dev:all   # API (3001), Garmin-Connector, Worker (Backend)
+pnpm dev:web   # Web-App auf http://localhost:3000
+```
+
+Browser: **http://localhost:3000**
+
+Die API-Basis-URL ist per Default `http://localhost:3001` und über
+`NEXT_PUBLIC_API_BASE_URL` überschreibbar. Die API erlaubt CORS für
+`WEB_ORIGIN` (Default `http://localhost:3000`) mit Credentials.
