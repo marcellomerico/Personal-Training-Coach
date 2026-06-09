@@ -20,6 +20,7 @@ Die vollständige Planung liegt in [`/docs`](./docs):
 - [`data-model.md`](./docs/data-model.md) – konzeptionelles Datenmodell
 - [`mvp-roadmap.md`](./docs/mvp-roadmap.md) – Phasen 0–7, MVP-Core & MVP-Extended
 - [`open-questions.md`](./docs/open-questions.md) – Entscheidungen, Risiken, offene Fragen
+- [`development-workflow.md`](./docs/development-workflow.md) – Branch-Regeln, Checks und Commit-Workflow
 
 ## Eckdaten (Stand Planung)
 
