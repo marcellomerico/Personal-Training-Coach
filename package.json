@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "dev:all": "bash scripts/dev-all.sh",
+    "dev:restart": "bash scripts/restart-dev.sh",
     "dev:api": "turbo run dev --filter=@ptc/api",
     "dev:bot": "turbo run dev --filter=@ptc/bot",
     "dev:worker": "turbo run dev --filter=@ptc/worker",
