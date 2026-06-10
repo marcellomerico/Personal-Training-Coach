@@ -6,6 +6,7 @@ import type {
   HealthStatus,
   ReadinessMetric,
   SafeUser,
+  GarminConnectionStatus,
   SleepRecord,
   SyncJobSummary,
   SyncStats,
@@ -103,6 +104,11 @@ export function getHealth(): Promise<HealthStatus> {
 
 export function connectGarmin(): Promise<{ providerAccountId: string; status: string }> {
   return request('/providers/garmin/connect', { method: 'POST' });
+}
+
+/** Verbindungsstatus des Garmin-Accounts (unabhängig von gesyncten Daten). */
+export function getGarminStatus(): Promise<GarminConnectionStatus> {
+  return request('/providers/garmin/status');
 }
 
 export function startGarminAuth(body: { email?: string }): Promise<GarminAuthStartResult> {

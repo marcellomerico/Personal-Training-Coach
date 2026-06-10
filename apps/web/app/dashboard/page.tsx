@@ -8,6 +8,7 @@ import {
   createTelegramLinkToken,
   getActivities,
   getDailyHealth,
+  getGarminStatus,
   getGarminSyncJobs,
   getHealth,
   getLatestReadiness,
@@ -29,6 +30,7 @@ import {
 import type {
   Activity,
   DailyHealthMetric,
+  GarminConnectionStatus,
   ReadinessDecision,
   ReadinessMetric,
   SafeUser,
@@ -49,6 +51,7 @@ export default function DashboardPage() {
   const [readiness, setReadiness] = useState<ReadinessMetric | null>(null);
   const [readinessHistory, setReadinessHistory] = useState<ReadinessMetric[]>([]);
   const [syncJobs, setSyncJobs] = useState<SyncJobSummary[]>([]);
+  const [garminStatus, setGarminStatus] = useState<GarminConnectionStatus | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -62,13 +65,14 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [a, h, s, r, history, jobs] = await Promise.all([
+    const [a, h, s, r, history, jobs, garmin] = await Promise.all([
       getActivities(10),
       getDailyHealth(7),
       getSleep(7),
       getLatestReadiness(),
       getReadinessHistory(14),
       getGarminSyncJobs(5),
+      getGarminStatus(),
     ]);
     setActivities(a);
     setHealth(h);
@@ -76,6 +80,7 @@ export default function DashboardPage() {
     setReadiness(r);
     setReadinessHistory(history);
     setSyncJobs(jobs);
+    setGarminStatus(garmin);
   }, []);
 
   // Auth-Gate + Initialdaten.
@@ -136,6 +141,8 @@ export default function DashboardPage() {
     try {
       await completeGarminAuth({ challengeId: garminChallengeId, mfaCode: garminMfaCode });
       setGarminChallengeId(null);
+      // Status sofort nachladen, damit "Garmin verbunden" auch ohne Sync erscheint.
+      await loadData();
       setNotice('Garmin verbunden (Stub-MFA abgeschlossen). Jetzt Sync starten.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Garmin-MFA fehlgeschlagen');
@@ -221,8 +228,11 @@ export default function DashboardPage() {
   const lastSleep = sleep[0] ?? null;
   const latestSyncJob = syncJobs[0] ?? null;
   const hasData = activities.length > 0 || health.length > 0 || sleep.length > 0;
-  // Garmin gilt als verbunden, sobald Daten existieren oder ein Sync erfolgreich war.
-  const garminConnected = hasData || syncJobs.some((job) => job.status === 'success');
+  // Verbindungsstatus kommt direkt aus dem Provider-Account; nur als Fallback
+  // (z. B. Status noch nicht geladen) auf Daten/Sync-Jobs zurückgreifen.
+  const garminConnected = garminStatus
+    ? garminStatus.connected
+    : hasData || syncJobs.some((job) => job.status === 'success');
   const telegramConnected = user?.telegramUserId != null;
 
   return (
@@ -287,7 +297,20 @@ export default function DashboardPage() {
         {/* Garmin-Aktionen (Stub) */}
         <div className="card">
           <div className="card-title">Garmin</div>
-          <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+          <p style={{ marginTop: 0, marginBottom: 8 }}>
+            <span className={`dot ${garminConnected ? 'ok' : 'bad'}`} />
+            {garminConnected ? 'Verbunden' : 'Nicht verbunden'}
+            {garminStatus?.authMode ? (
+              <span className="muted"> · {garminStatus.authMode}</span>
+            ) : null}
+          </p>
+          {garminStatus?.connectedAt && (
+            <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>
+              Verbunden seit {fmtDateTime(garminStatus.connectedAt)} · Letzter Sync:{' '}
+              {garminStatus.lastSyncAt ? fmtDateTime(garminStatus.lastSyncAt) : 'noch keiner'}
+            </div>
+          )}
+          <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>
             Stub-Modus: Auth starten → MFA bestätigen (Stub-Code <code>000000</code>) → Sync.
           </p>
           <div className="row">

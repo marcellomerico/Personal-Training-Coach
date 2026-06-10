@@ -102,6 +102,18 @@ export interface GarminAuthCompleteResult {
   authMode: string;
 }
 
+// Antwort von GET /providers/garmin/status (direkt aus ProviderAccount,
+// unabhängig davon, ob schon Daten gesynct wurden).
+export interface GarminConnectionStatus {
+  connected: boolean;
+  providerAccountId: string | null;
+  status: string | null;
+  authMode: string | null;
+  externalUserId: string | null;
+  connectedAt: string | null;
+  lastSyncAt: string | null;
+}
+
 export type ReadinessDecision = 'rest' | 'easy' | 'normal' | 'hard';
 
 export interface ReadinessRuleContribution {

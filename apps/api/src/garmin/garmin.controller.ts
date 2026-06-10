@@ -36,6 +36,11 @@ export class GarminController {
     return this.garmin.connect(user.id);
   }
 
+  @Get('providers/garmin/status')
+  status(@CurrentUser() user: SafeUser) {
+    return this.garmin.getStatus(user.id);
+  }
+
   @Post('sync/garmin')
   @HttpCode(200)
   async sync(
