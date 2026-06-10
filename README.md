@@ -49,6 +49,9 @@ pnpm dev:all
 
 # 5) Web-App starten (separates Terminal)
 pnpm dev:web
+
+# Alternative: alles stoppen, Next-Cache leeren und Backend + Web neu starten
+pnpm dev:restart
 ```
 
 `pnpm dev:all` prüft Postgres, legt bei Bedarf die Python-venv für den
@@ -60,6 +63,11 @@ werden nicht beendet, sondern übersprungen.
 **http://localhost:3000** – dort registrieren/einloggen, Garmin-Auth-Stub
 starten, mit dem Stub-MFA-Code `000000` verbinden und syncen, Dashboard mit
 letzter Aktivität, Health- und Schlafdaten.
+
+`pnpm dev:restart` beendet lokale Dev-Prozesse auf den Ports für Web, API und
+Garmin-Connector, leert `apps/web/.next` und startet Backend-Services plus Web
+neu. Das ist der empfohlene Befehl nach Branch-Wechseln oder Next.js
+Dev-Cache-Fehlern.
 
 Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
 `pnpm dev:bot`, `pnpm dev:web`.
