@@ -12,6 +12,8 @@ import { type Prisma, type PrismaClient } from '@ptc/db';
 const ACTIVITY_LOOKBACK_DAYS = 14;
 /** Tage Health-Rückblick (für Baseline-Ableitung ohne Profilwerte). */
 const HEALTH_LOOKBACK_DAYS = 21;
+/** Standardfenster fuer Readiness-Historie nach einem Sync. */
+export const DEFAULT_READINESS_HISTORY_DAYS = 14;
 
 function dateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
@@ -25,6 +27,22 @@ function daysBefore(date: Date, days: number): Date {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() - days);
   return d;
+}
+
+function daysAfter(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function historyDatesEndingAt(endDate: string, days: number): string[] {
+  const end = dateOnly(endDate);
+  const count = Math.max(1, days);
+  return Array.from({ length: count }, (_, index) => {
+    const d = new Date(end);
+    d.setUTCDate(end.getUTCDate() - (count - 1 - index));
+    return isoDate(d);
+  });
 }
 
 /**
@@ -81,11 +99,23 @@ export async function computeAndStoreReadiness(
     prisma.dailyHealthMetric.findFirst({ where: { userId, date: target } }),
     prisma.sleepRecord.findFirst({ where: { userId, date: target } }),
     prisma.activity.findMany({
-      where: { userId, startTime: { gte: daysBefore(target, ACTIVITY_LOOKBACK_DAYS) } },
+      where: {
+        userId,
+        startTime: {
+          gte: daysBefore(target, ACTIVITY_LOOKBACK_DAYS),
+          lt: daysAfter(target, 1),
+        },
+      },
       orderBy: { startTime: 'desc' },
     }),
     prisma.dailyHealthMetric.findMany({
-      where: { userId, date: { gte: daysBefore(target, HEALTH_LOOKBACK_DAYS) } },
+      where: {
+        userId,
+        date: {
+          gte: daysBefore(target, HEALTH_LOOKBACK_DAYS),
+          lte: target,
+        },
+      },
       orderBy: { date: 'desc' },
     }),
     prisma.userProfile.findUnique({ where: { userId } }),
@@ -160,4 +190,28 @@ export async function computeAndStoreReadiness(
     'Readiness berechnet',
   );
   return result;
+}
+
+/**
+ * Berechnet eine rollierende Readiness-Historie bis zum juengsten Datentag.
+ * Damit wird nach einem Backfill/Sync nicht nur der aktuelle Tag sichtbar.
+ */
+export async function computeAndStoreReadinessHistory(
+  prisma: PrismaClient,
+  userId: string,
+  days = DEFAULT_READINESS_HISTORY_DAYS,
+  logger?: Logger,
+): Promise<ReadinessResult[]> {
+  const latestDate = await resolveTargetDate(prisma, userId, null);
+  if (!latestDate) {
+    logger?.info({ userId }, 'Readiness-Historie übersprungen – keine Daten vorhanden');
+    return [];
+  }
+
+  const results: ReadinessResult[] = [];
+  for (const date of historyDatesEndingAt(latestDate, days)) {
+    const result = await computeAndStoreReadiness(prisma, userId, date, logger);
+    if (result) results.push(result);
+  }
+  return results;
 }

@@ -11,6 +11,7 @@ import {
   getHealth,
   getLatestReadiness,
   getMe,
+  getReadinessHistory,
   getSleep,
   logout,
   startGarminAuth,
@@ -37,6 +38,7 @@ export default function DashboardPage() {
   const [health, setHealth] = useState<DailyHealthMetric[]>([]);
   const [sleep, setSleep] = useState<SleepRecord[]>([]);
   const [readiness, setReadiness] = useState<ReadinessMetric | null>(null);
+  const [readinessHistory, setReadinessHistory] = useState<ReadinessMetric[]>([]);
   const [syncJobs, setSyncJobs] = useState<SyncJobSummary[]>([]);
 
   const [error, setError] = useState<string | null>(null);
@@ -48,17 +50,19 @@ export default function DashboardPage() {
   const [connecting, setConnecting] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [a, h, s, r, jobs] = await Promise.all([
+    const [a, h, s, r, history, jobs] = await Promise.all([
       getActivities(10),
       getDailyHealth(7),
       getSleep(7),
       getLatestReadiness(),
+      getReadinessHistory(14),
       getGarminSyncJobs(5),
     ]);
     setActivities(a);
     setHealth(h);
     setSleep(s);
     setReadiness(r);
+    setReadinessHistory(history);
     setSyncJobs(jobs);
   }, []);
 
@@ -222,6 +226,7 @@ export default function DashboardPage() {
 
         {/* Readiness / Tagesbewertung */}
         <ReadinessCard readiness={readiness} />
+        <ReadinessHistoryCard history={readinessHistory} />
 
         {/* Letzte Aktivität */}
         <div className="card">
@@ -291,6 +296,57 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="metric">
       <div className="label">{label}</div>
       <div className="value">{value}</div>
+    </div>
+  );
+}
+
+function ReadinessHistoryCard({ history }: { history: ReadinessMetric[] }) {
+  if (history.length === 0) {
+    return (
+      <div className="card">
+        <div className="card-title">Readiness-Historie</div>
+        <p className="muted">Noch keine Historie vorhanden – Sync starten.</p>
+      </div>
+    );
+  }
+
+  const averageScore = Math.round(
+    history.reduce((sum, item) => sum + item.readinessScore, 0) / history.length,
+  );
+  const oldestFirst = [...history].reverse();
+
+  return (
+    <div className="card">
+      <div className="card-title">Readiness-Historie · {history.length} Tage</div>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <Metric label="Ø Score" value={`${averageScore} / 100`} />
+        <Metric label="Neuester Tag" value={fmtDate(history[0]?.date ?? null)} />
+      </div>
+      <div className="row" style={{ alignItems: 'flex-end', gap: 6 }}>
+        {oldestFirst.map((item) => (
+          <div
+            key={item.id}
+            title={`${fmtDate(item.date)} · ${item.readinessScore}/100 · ${DECISION_LABEL[item.decision]}`}
+            style={{
+              width: 24,
+              height: Math.max(12, item.readinessScore),
+              borderRadius: 6,
+              background: DECISION_COLOR[item.decision],
+              opacity: 0.9,
+            }}
+          />
+        ))}
+      </div>
+      <div className="stack" style={{ marginTop: 14 }}>
+        {history.slice(0, 5).map((item) => (
+          <div key={item.id} className="row" style={{ justifyContent: 'space-between' }}>
+            <span>{fmtDate(item.date)}</span>
+            <span className="muted">
+              {item.readinessScore}/100 · {DECISION_LABEL[item.decision]}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

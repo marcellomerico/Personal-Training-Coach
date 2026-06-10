@@ -92,7 +92,8 @@ openssl rand -base64 32
 ## Readiness / Coach-MVP (Phase 5)
 
 Nach jedem Garmin-Sync berechnet das System automatisch eine **Tagesbewertung**
-(Readiness) für den jüngsten Datentag und speichert sie (`readiness_metrics`).
+(Readiness) für die letzten 14 Tage bis zum jüngsten Datentag und speichert sie
+(`readiness_metrics`).
 Die Berechnung ist **deterministisch und regelbasiert** (Package `@ptc/analysis`,
 kein LLM): schlechter Schlaf, HRV unter Baseline, erhöhter Ruhepuls und eine harte
 Einheit am Vortag senken den Score (0–100). Daraus folgt eine Entscheidung
@@ -100,7 +101,8 @@ Einheit am Vortag senken den Score (0–100). Daraus folgt eine Entscheidung
 `rationale` (Inputs + Regel-Beiträge).
 
 API (user-scoped, SessionGuard): `GET /readiness/latest`,
-`POST /analysis/readiness/recompute`. Dashboard und Telegram-`/today` zeigen die
+`GET /readiness/history`, `POST /analysis/readiness/recompute`. Dashboard zeigt
+den neuesten Wert und eine kleine Historie; Telegram-`/today` zeigt die neueste
 Bewertung an, falls vorhanden.
 
 > ⚠️ **Kein medizinischer Rat.** Das ist eine grobe v0-Heuristik zur Orientierung;
