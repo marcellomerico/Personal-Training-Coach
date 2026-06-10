@@ -33,6 +33,12 @@ function ensureDotenv(): void {
  * Zentrale Env-Validierung. Schlägt früh und laut fehl, wenn Pflichtwerte fehlen.
  * Jeder Service ruft `loadEnv()` einmal beim Start auf.
  */
+const optionalMinString = (min: number) =>
+  z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(min).optional(),
+  );
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -47,8 +53,8 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
 
   // Verschlüsselung sensibler Felder (Tokens) at rest.
-  ENCRYPTION_KEY: z.string().min(32).optional(),
-  SESSION_SECRET: z.string().min(16).optional(),
+  ENCRYPTION_KEY: optionalMinString(32),
+  SESSION_SECRET: optionalMinString(16),
   // Cookie-Name der Session.
   SESSION_COOKIE_NAME: z.string().default("ptc_session"),
   // Session-Lebensdauer in Tagen.

@@ -3,11 +3,17 @@
 Isolierter Connector für die **primäre** Datenquelle Garmin (inoffiziell, `garth`/
 `garminconnect`). Liefert normalisierte Daten an den TS-Kern (interne API/DB).
 
-> Status: **Stub (Phase 1).** Vollständige Implementierung in **Phase 2 (Datenimport)**.
+> Status: **Stub.** Datenimport und Auth-Flow sind ohne echten Garmin-Login testbar.
+
+## Stub-Endpunkte
+- `POST /auth/start` startet eine MFA-Challenge. Im Stub-Modus lautet der Code `000000`.
+- `POST /auth/complete` liefert eine Stub-Session zurück, die die API verschlüsselt in
+  `provider_accounts.secrets` speichert.
+- `GET /activities`, `GET /daily-health`, `GET /sleep` liefern deterministische Testdaten.
 
 ## Geplant
-- Einmaliger interaktiver Login inkl. **MFA** (E6), danach Token-basiert (`garth`).
-- Endpunkte: `fetch_activities`, `fetch_health_metrics`, `refresh_token`.
+- Echter einmaliger interaktiver Login inkl. **MFA** (E6), danach Token-basiert (`garth`).
+- Token-Refresh und robuste Fehlerzustände für abgelaufene Garmin-Sessions.
 - Läuft als eigener Container (siehe `docker-compose.yml`, folgt in Phase 2).
 
 ## Hinweise

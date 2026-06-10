@@ -1,6 +1,8 @@
 import type {
   Activity,
   DailyHealthMetric,
+  GarminAuthCompleteResult,
+  GarminAuthStartResult,
   HealthStatus,
   ReadinessMetric,
   SafeUser,
@@ -94,6 +96,23 @@ export function getHealth(): Promise<HealthStatus> {
 
 export function connectGarmin(): Promise<{ providerAccountId: string; status: string }> {
   return request('/providers/garmin/connect', { method: 'POST' });
+}
+
+export function startGarminAuth(body: { email?: string }): Promise<GarminAuthStartResult> {
+  return request('/providers/garmin/auth/start', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function completeGarminAuth(body: {
+  challengeId: string;
+  mfaCode: string;
+}): Promise<GarminAuthCompleteResult> {
+  return request('/providers/garmin/auth/complete', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export function syncGarmin(): Promise<{ ok: boolean; stats: SyncStats }> {

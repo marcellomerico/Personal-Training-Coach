@@ -57,14 +57,18 @@ Telegram-Bot nur, wenn `TELEGRAM_BOT_TOKEN` gesetzt ist. Bereits belegte Ports
 werden nicht beendet, sondern übersprungen.
 
 `pnpm dev:web` startet die Next.js-Web-App (Phase 4 MVP) auf
-**http://localhost:3000** – dort registrieren/einloggen, Garmin (Stub)
-verbinden und syncen, Dashboard mit letzter Aktivität, Health- und Schlafdaten.
+**http://localhost:3000** – dort registrieren/einloggen, Garmin-Auth-Stub
+starten, mit dem Stub-MFA-Code `000000` verbinden und syncen, Dashboard mit
+letzter Aktivität, Health- und Schlafdaten.
 
 Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
 `pnpm dev:bot`, `pnpm dev:web`.
 
-Import-Flow (nach Login): `POST /providers/garmin/connect` → `POST /sync/garmin` →
-Daten lesen via `GET /activities`, `GET /daily-health`, `GET /sleep`.
+Import-Flow (nach Login): `POST /providers/garmin/auth/start` →
+`POST /providers/garmin/auth/complete` (Stub-MFA-Code `000000`) →
+`POST /sync/garmin` → Daten lesen via `GET /activities`, `GET /daily-health`,
+`GET /sleep`. Der alte Dev-Endpunkt `POST /providers/garmin/connect` bleibt als
+Stub-Abkürzung vorhanden.
 
 ## Provider-Secrets
 
@@ -74,7 +78,8 @@ werden. Das Package `@ptc/config` stellt dafür `encryptSecret`,
 Funktionen nutzen `ENCRYPTION_KEY` und speichern Werte im versionierten
 `ptc:v1`-Format, damit spätere Migrationen möglich bleiben.
 
-Vor echter Garmin-/Strava-Anbindung muss `ENCRYPTION_KEY` gesetzt sein:
+Vor dem Abschließen des Garmin-Auth-Stubs und vor echter Garmin-/Strava-Anbindung
+muss `ENCRYPTION_KEY` gesetzt sein:
 
 ```bash
 openssl rand -base64 32

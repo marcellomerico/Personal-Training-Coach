@@ -11,10 +11,14 @@ import type {
 } from '@ptc/core';
 import {
   activitiesResponseSchema,
+  garminAuthCompleteResponseSchema,
+  garminAuthStartResponseSchema,
   healthResponseSchema,
   sleepResponseSchema,
   type ActivityPayload,
   type DailyHealthPayload,
+  type GarminAuthCompleteResponse,
+  type GarminAuthStartResponse,
   type SleepPayload,
 } from './schemas';
 
@@ -25,6 +29,15 @@ export interface GarminConnectorOptions {
   apiKey?: string;
   /** Standard-Rückblick in Tagen, wenn kein `since` übergeben wird. */
   defaultLookbackDays?: number;
+}
+
+export interface GarminAuthStartInput {
+  email?: string;
+}
+
+export interface GarminAuthCompleteInput {
+  challengeId: string;
+  mfaCode: string;
 }
 
 const ACTIVITY_TYPE_MAP: Record<string, ActivityType> = {
@@ -120,6 +133,14 @@ export class GarminConnector implements SourceConnector {
     return { activities, dailyHealth, sleep, raw };
   }
 
+  async startAuth(input: GarminAuthStartInput): Promise<GarminAuthStartResponse> {
+    return this.post('/auth/start', input, garminAuthStartResponseSchema);
+  }
+
+  async completeAuth(input: GarminAuthCompleteInput): Promise<GarminAuthCompleteResponse> {
+    return this.post('/auth/complete', input, garminAuthCompleteResponseSchema);
+  }
+
   private normalizeActivity(a: ActivityPayload): NormalizedActivity {
     return {
       source: this.provider,
@@ -181,6 +202,32 @@ export class GarminConnector implements SourceConnector {
       const body = await res.text().catch(() => '');
       throw new Error(
         `Garmin-Connector ${path} fehlgeschlagen: HTTP ${res.status} ${body}`.trim(),
+      );
+    }
+    const json: unknown = await res.json();
+    return schema.parse(json);
+  }
+
+  private async post<T>(
+    path: string,
+    body: unknown,
+    schema: { parse: (v: unknown) => T },
+  ): Promise<T> {
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      'content-type': 'application/json',
+    };
+    if (this.apiKey) headers['x-internal-key'] = this.apiKey;
+
+    const res = await fetch(this.baseUrl + path, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(
+        `Garmin-Connector ${path} fehlgeschlagen: HTTP ${res.status} ${text}`.trim(),
       );
     }
     const json: unknown = await res.json();
