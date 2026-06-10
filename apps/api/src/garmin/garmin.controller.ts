@@ -52,6 +52,17 @@ export class GarminController {
     return { ok: true, ...result };
   }
 
+  @Post('sync/garmin/enqueue')
+  @HttpCode(202)
+  async enqueueSync(
+    @CurrentUser() user: SafeUser,
+    @Body() body: { since?: string } | undefined,
+  ) {
+    const since = body?.since ? new Date(body.since) : null;
+    const syncJob = await this.garmin.enqueueSync(user.id, since);
+    return { ok: true, syncJob };
+  }
+
   @Get('sync/garmin/jobs')
   syncJobs(@CurrentUser() user: SafeUser, @Query('limit') limit?: string) {
     return this.garmin.latestSyncJobs(user.id, limit ? Number(limit) : undefined);

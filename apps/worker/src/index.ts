@@ -2,25 +2,20 @@ import PgBoss from "pg-boss";
 import { createLogger, loadEnv } from "@ptc/config";
 import { GarminConnector } from "@ptc/connectors";
 import { prisma } from "@ptc/db";
-import { runTrackedGarminSync } from "@ptc/ingest";
+import {
+  GARMIN_SYNC_QUEUE,
+  runTrackedGarminSync,
+  type GarminSyncJobData,
+} from "@ptc/ingest";
 
 /**
  * Background-Worker/Scheduler (pg-boss, nutzt Postgres als Queue).
  * Phase 2: Job `garmin-sync` ruft dieselbe Ingest-Orchestrierung wie die API auf.
+ * Queue-Name und Job-Datentyp kommen aus @ptc/ingest (geteilt mit der API).
  * Nächtliche Analyse/Token-Refresh folgen in späteren Phasen.
  */
 const env = loadEnv();
 const log = createLogger("worker");
-
-export const GARMIN_SYNC_QUEUE = "garmin-sync";
-
-export interface GarminSyncJobData {
-  userId: string;
-  providerAccountId: string;
-  externalUserId: string | null;
-  since?: string | null;
-  syncJobId?: string | null;
-}
 
 async function main() {
   const boss = new PgBoss(env.DATABASE_URL);

@@ -132,6 +132,11 @@ export function syncGarmin(): Promise<{ ok: boolean; stats: SyncStats; syncJob: 
   return request('/sync/garmin', { method: 'POST', body: JSON.stringify({}) });
 }
 
+/** Reiht einen Garmin-Sync im Worker ein (async); liefert den queued SyncJob. */
+export function enqueueGarminSync(): Promise<{ ok: boolean; syncJob: SyncJobSummary }> {
+  return request('/sync/garmin/enqueue', { method: 'POST', body: JSON.stringify({}) });
+}
+
 export function getGarminSyncJobs(limit = 5): Promise<SyncJobSummary[]> {
   return request(`/sync/garmin/jobs?limit=${limit}`);
 }
