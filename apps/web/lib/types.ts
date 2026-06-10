@@ -59,6 +59,20 @@ export interface SyncStats {
   sleep: number;
 }
 
+export interface SyncJobSummary {
+  id: string;
+  status: 'queued' | 'running' | 'success' | 'failed';
+  type: string;
+  rangeFrom: string | null;
+  rangeTo: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  stats: unknown;
+  attempt: number;
+  createdAt: string;
+}
+
 export interface HealthStatus {
   status: string;
   service: string;

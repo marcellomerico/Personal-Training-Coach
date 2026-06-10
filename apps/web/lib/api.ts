@@ -7,6 +7,7 @@ import type {
   ReadinessMetric,
   SafeUser,
   SleepRecord,
+  SyncJobSummary,
   SyncStats,
 } from './types';
 
@@ -115,8 +116,12 @@ export function completeGarminAuth(body: {
   });
 }
 
-export function syncGarmin(): Promise<{ ok: boolean; stats: SyncStats }> {
+export function syncGarmin(): Promise<{ ok: boolean; stats: SyncStats; syncJob: SyncJobSummary }> {
   return request('/sync/garmin', { method: 'POST', body: JSON.stringify({}) });
+}
+
+export function getGarminSyncJobs(limit = 5): Promise<SyncJobSummary[]> {
+  return request(`/sync/garmin/jobs?limit=${limit}`);
 }
 
 export function getActivities(limit = 10): Promise<Activity[]> {

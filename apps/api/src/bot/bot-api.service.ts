@@ -143,10 +143,10 @@ export class BotApiService {
   async sync(
     telegramUserIdRaw: string,
     since: Date | null,
-  ): Promise<{ user: BotUserRef; stats: Awaited<ReturnType<GarminService['sync']>> }> {
+  ): Promise<{ user: BotUserRef } & Awaited<ReturnType<GarminService['sync']>>> {
     const user = await this.resolveTelegramUser(telegramUserIdRaw);
-    const stats = await this.garmin.sync(user.id, since);
-    return { user, stats };
+    const result = await this.garmin.sync(user.id, since);
+    return { user, ...result };
   }
 
   private async resolveTelegramUser(telegramUserIdRaw: string): Promise<BotUserRef> {

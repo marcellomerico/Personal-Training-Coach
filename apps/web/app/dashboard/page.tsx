@@ -7,6 +7,7 @@ import {
   completeGarminAuth,
   getActivities,
   getDailyHealth,
+  getGarminSyncJobs,
   getHealth,
   getLatestReadiness,
   getMe,
@@ -23,6 +24,7 @@ import type {
   ReadinessMetric,
   SafeUser,
   SleepRecord,
+  SyncJobSummary,
   SyncStats,
 } from '@/lib/types';
 
@@ -35,6 +37,7 @@ export default function DashboardPage() {
   const [health, setHealth] = useState<DailyHealthMetric[]>([]);
   const [sleep, setSleep] = useState<SleepRecord[]>([]);
   const [readiness, setReadiness] = useState<ReadinessMetric | null>(null);
+  const [syncJobs, setSyncJobs] = useState<SyncJobSummary[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -45,16 +48,18 @@ export default function DashboardPage() {
   const [connecting, setConnecting] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [a, h, s, r] = await Promise.all([
+    const [a, h, s, r, jobs] = await Promise.all([
       getActivities(10),
       getDailyHealth(7),
       getSleep(7),
       getLatestReadiness(),
+      getGarminSyncJobs(5),
     ]);
     setActivities(a);
     setHealth(h);
     setSleep(s);
     setReadiness(r);
+    setSyncJobs(jobs);
   }, []);
 
   // Auth-Gate + Initialdaten.
@@ -131,7 +136,7 @@ export default function DashboardPage() {
       const res = await syncGarmin();
       const s: SyncStats = res.stats;
       setNotice(
-        `Sync ok – Aktivitäten: ${s.activities}, Health: ${s.dailyHealth}, Schlaf: ${s.sleep}.`,
+        `Sync ok – Job ${res.syncJob.id}, Aktivitäten: ${s.activities}, Health: ${s.dailyHealth}, Schlaf: ${s.sleep}.`,
       );
       await loadData();
     } catch (err) {
@@ -152,6 +157,7 @@ export default function DashboardPage() {
   const lastActivity = activities[0] ?? null;
   const today = health[0] ?? null;
   const lastSleep = sleep[0] ?? null;
+  const latestSyncJob = syncJobs[0] ?? null;
   const hasData = activities.length > 0 || health.length > 0 || sleep.length > 0;
 
   return (
@@ -182,7 +188,10 @@ export default function DashboardPage() {
               {hasData ? 'Daten vorhanden' : 'Keine Daten'}
             </span>
             <span className="muted">
-              Letzter Sync: {lastActivity ? fmtDateTime(lastActivity.startTime) : '–'}
+              Letzter Sync:{' '}
+              {latestSyncJob?.finishedAt
+                ? `${syncStatusText(latestSyncJob.status)} · ${fmtDateTime(latestSyncJob.finishedAt)}`
+                : '–'}
             </span>
           </div>
           <div className="row">
@@ -208,6 +217,8 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+
+        <SyncJobsCard jobs={syncJobs} />
 
         {/* Readiness / Tagesbewertung */}
         <ReadinessCard readiness={readiness} />
@@ -280,6 +291,48 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="metric">
       <div className="label">{label}</div>
       <div className="value">{value}</div>
+    </div>
+  );
+}
+
+function syncStatusText(status: SyncJobSummary['status']): string {
+  const labels: Record<SyncJobSummary['status'], string> = {
+    queued: 'Wartet',
+    running: 'Läuft',
+    success: 'Erfolgreich',
+    failed: 'Fehlgeschlagen',
+  };
+  return labels[status];
+}
+
+function SyncJobsCard({ jobs }: { jobs: SyncJobSummary[] }) {
+  return (
+    <div className="card">
+      <div className="card-title">Sync-Status</div>
+      {jobs.length === 0 ? (
+        <p className="muted">Noch kein Sync-Job protokolliert.</p>
+      ) : (
+        <div className="stack">
+          {jobs.map((job) => (
+            <div key={job.id} className="metric">
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <strong>{syncStatusText(job.status)}</strong>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {fmtDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+                Job {job.id} · Versuch {job.attempt}
+              </div>
+              {job.error && (
+                <div className="error" style={{ marginTop: 8, marginBottom: 0 }}>
+                  {job.error}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
