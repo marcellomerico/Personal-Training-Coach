@@ -1,26 +1,26 @@
 """Garmin-Connector (Python, isoliert).
 
-Phase 2: Stub-Modus mit deterministischen Daten, damit der gesamte Import-Pfad
-(API -> Connector -> DB) ohne echten Garmin-Login end-to-end testbar ist.
-
-Der echte Login (garth/garminconnect, inkl. MFA) und die Token-Persistenz folgen,
-ohne dass sich dieses HTTP-Interface ändert.
+Die HTTP-Endpunkte delegieren an einen Provider (Stub oder Real, siehe
+`provider.py`). Im Stub-Modus liefert der Connector deterministische Daten,
+damit der gesamte Import-Pfad (API -> Connector -> DB) ohne echten Garmin-Login
+end-to-end testbar ist. Der echte Login (garth/garminconnect, inkl. MFA) wird
+im Real-Provider ergänzt, ohne dass sich dieses HTTP-Interface ändert.
 """
 
 import os
-from datetime import datetime, timedelta, timezone
 from typing import Optional
-from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from . import stub_data
+from .provider import get_provider, is_stub_mode
 
-STUB_MODE = os.getenv("GARMIN_STUB_MODE", "true").lower() != "false"
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 
-app = FastAPI(title="garmin-connector", version="0.2.0")
+app = FastAPI(title="garmin-connector", version="0.3.0")
+
+# Provider einmal beim Start anhand GARMIN_STUB_MODE auswählen.
+provider = get_provider()
 
 
 class AuthStartRequest(BaseModel):
@@ -40,45 +40,22 @@ def require_internal_key(x_internal_key: Optional[str] = Header(default=None)) -
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "garmin-connector", "stubMode": STUB_MODE}
+    return {
+        "status": "ok",
+        "service": "garmin-connector",
+        "stubMode": is_stub_mode(),
+        "providerMode": provider.mode,
+    }
 
 
 @app.post("/auth/start", dependencies=[Depends(require_internal_key)])
 def start_auth(body: AuthStartRequest) -> dict:
-    if not STUB_MODE:
-        raise HTTPException(status_code=501, detail="echter Garmin-Login noch nicht implementiert")
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
-    return {
-        "mode": "stub",
-        "mfaRequired": True,
-        "challengeId": f"stub-{uuid4().hex}",
-        "expiresAt": expires_at.isoformat().replace("+00:00", "Z"),
-        "message": "Stub-MFA gestartet. Im Stub-Modus lautet der Code 000000.",
-    }
+    return provider.start_auth(body.email)
 
 
 @app.post("/auth/complete", dependencies=[Depends(require_internal_key)])
 def complete_auth(body: AuthCompleteRequest) -> dict:
-    if not STUB_MODE:
-        raise HTTPException(status_code=501, detail="echter Garmin-Login noch nicht implementiert")
-    if not body.challenge_id.startswith("stub-"):
-        raise HTTPException(status_code=400, detail="ungueltige Stub-Challenge")
-    if body.mfa_code != "000000":
-        raise HTTPException(status_code=401, detail="ungueltiger Stub-MFA-Code")
-
-    connected_at = datetime.now(timezone.utc)
-    session_id = body.challenge_id.removeprefix("stub-")[:16]
-    return {
-        "externalUserId": f"stub-garmin-{session_id}",
-        "displayName": "Garmin Stub Account",
-        "connectedAt": connected_at.isoformat().replace("+00:00", "Z"),
-        "secrets": {
-            "mode": "stub",
-            "sessionId": session_id,
-            "issuedAt": connected_at.isoformat().replace("+00:00", "Z"),
-            "note": "Stub-Session ohne echte Garmin-Zugangsdaten.",
-        },
-    }
+    return provider.complete_auth(body.challenge_id, body.mfa_code)
 
 
 @app.get("/activities", dependencies=[Depends(require_internal_key)])
@@ -87,9 +64,7 @@ def get_activities(
     to: str = Query(...),
     seed: str = Query("default"),
 ) -> dict:
-    if not STUB_MODE:
-        raise HTTPException(status_code=501, detail="echter Garmin-Login noch nicht implementiert")
-    return {"activities": stub_data.activities(seed, from_, to)}
+    return provider.activities(seed, from_, to)
 
 
 @app.get("/daily-health", dependencies=[Depends(require_internal_key)])
@@ -98,9 +73,7 @@ def get_daily_health(
     to: str = Query(...),
     seed: str = Query("default"),
 ) -> dict:
-    if not STUB_MODE:
-        raise HTTPException(status_code=501, detail="echter Garmin-Login noch nicht implementiert")
-    return {"metrics": stub_data.daily_health(seed, from_, to)}
+    return provider.daily_health(seed, from_, to)
 
 
 @app.get("/sleep", dependencies=[Depends(require_internal_key)])
@@ -109,6 +82,4 @@ def get_sleep(
     to: str = Query(...),
     seed: str = Query("default"),
 ) -> dict:
-    if not STUB_MODE:
-        raise HTTPException(status_code=501, detail="echter Garmin-Login noch nicht implementiert")
-    return {"sleep": stub_data.sleep(seed, from_, to)}
+    return provider.sleep(seed, from_, to)
