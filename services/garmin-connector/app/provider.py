@@ -1,17 +1,25 @@
 """Provider-Abstraktion für den Garmin-Connector: Stub vs. Real.
 
-Ziel dieses Schritts (Foundation): die HTTP-Endpunkte bedienen ein gemeinsames
-Interface, egal ob im Stub- oder im echten Modus. Der Stub liefert wie bisher
-deterministische Testdaten. Der Real-Provider ist die Grundstruktur für den
-echten garth/garminconnect-Login (Implementierung folgt separat) und liefert
-**kontrollierte, verständliche Fehler**, wenn Pakete oder Zugangsdaten fehlen –
-statt kryptischer Tracebacks oder eines nackten HTTP 501.
+Die HTTP-Endpunkte bedienen ein gemeinsames Interface, egal ob Stub- oder
+echter Modus. Der Stub liefert deterministische Testdaten. Der Real-Provider
+führt den echten Garmin-Login über `garth` aus (inkl. MFA/2FA über den
+zweistufigen start/complete-Flow) und gibt die Session-Tokens an die API
+zurück, die sie verschlüsselt in `provider_accounts.secrets` speichert.
+
+Sicherheit:
+- Zugangsdaten kommen ausschliesslich aus der Umgebung (GARMIN_EMAIL/
+  GARMIN_PASSWORD), nie über die HTTP-Schnittstelle.
+- Das Passwort wird **nicht** gespeichert und **nicht** geloggt.
+- Datenabruf (activities/daily-health/sleep) im Real-Modus folgt separat
+  (feat/garmin-real-data-mapping).
 """
 
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -20,6 +28,8 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from . import stub_data
+
+logger = logging.getLogger("garmin-connector.provider")
 
 
 def _iso(dt: datetime) -> str:
@@ -93,21 +103,25 @@ class StubGarminProvider(GarminProvider):
 
 
 class RealGarminProvider(GarminProvider):
-    """Grundstruktur für den echten Login (garth/garminconnect).
+    """Echter Garmin-Login über garth (inkl. MFA), zweistufig start/complete.
 
-    Implementiert noch keinen Login – stellt aber sicher, dass jeder Aufruf mit
-    einer klaren Fehlermeldung endet: erst Pakete prüfen, dann Zugangsdaten,
-    dann der Hinweis, dass die eigentliche Umsetzung noch aussteht.
+    `start_auth` startet den Login mit den Umgebungs-Zugangsdaten. Verlangt
+    Garmin MFA, wird der Login-Zwischenzustand unter einer challengeId zwischen-
+    gespeichert; `complete_auth` schliesst ihn mit dem Code ab und liefert die
+    Session-Tokens. Datenabruf folgt in feat/garmin-real-data-mapping.
     """
 
     mode = "real"
     REQUIRED_PACKAGES = ("garth", "garminconnect")
     REQUIRED_CREDENTIALS = ("GARMIN_EMAIL", "GARMIN_PASSWORD")
+    CHALLENGE_TTL_SEC = 10 * 60
 
     def __init__(self) -> None:
         self.missing_packages = [
             pkg for pkg in self.REQUIRED_PACKAGES if importlib.util.find_spec(pkg) is None
         ]
+        # Login-Zwischenzustände (MFA) je challengeId; nur im Prozess, kurzlebig.
+        self._challenges: dict[str, dict] = {}
 
     def _ensure_ready(self) -> None:
         if self.missing_packages:
@@ -131,35 +145,138 @@ class RealGarminProvider(GarminProvider):
                 ),
             )
 
-    def _not_implemented(self) -> dict:
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "Garmin Real-Login ist strukturell vorbereitet, aber noch nicht "
-                "implementiert. Der echte garth/garminconnect-Login folgt im "
-                "nächsten Schritt (feat/garmin-real-login)."
-            ),
-        )
+    def _prune_challenges(self) -> None:
+        now = time.monotonic()
+        expired = [cid for cid, c in self._challenges.items() if c["expires"] < now]
+        for cid in expired:
+            self._challenges.pop(cid, None)
+
+    @staticmethod
+    def _session_to_secrets(garth_client) -> dict:
+        """Serialisiert die garth-Session als Token-String (kein Passwort)."""
+        token = garth_client.dumps()
+        return {
+            "mode": "real",
+            "provider": "garth",
+            "session": token,
+            "issuedAt": _iso(datetime.now(timezone.utc)),
+        }
+
+    @staticmethod
+    def _external_user_id(garth_client) -> str:
+        # garth.client.username ist der Garmin-Connect-Benutzername.
+        username = getattr(garth_client, "username", None)
+        if not username:
+            profile = getattr(garth_client, "profile", None) or {}
+            username = profile.get("userName") or profile.get("displayName")
+        return str(username) if username else "garmin-user"
 
     def start_auth(self, email: Optional[str]) -> dict:
         self._ensure_ready()
-        return self._not_implemented()
+        self._prune_challenges()
+
+        import garth  # lokal, da optionales Paket
+
+        garmin_email = os.environ["GARMIN_EMAIL"]
+        garmin_password = os.environ["GARMIN_PASSWORD"]
+
+        try:
+            # return_on_mfa=True -> garth bricht vor der MFA ab und gibt den
+            # Zwischenzustand zurück, statt interaktiv zu fragen.
+            result = garth.login(garmin_email, garmin_password, return_on_mfa=True)
+        except Exception as err:  # noqa: BLE001 - Fehler kontrolliert melden
+            # Wichtig: niemals Passwort/E-Mail in die Fehlermeldung aufnehmen.
+            logger.warning("Garmin-Login fehlgeschlagen: %s", type(err).__name__)
+            raise HTTPException(
+                status_code=502,
+                detail="Garmin-Login fehlgeschlagen (Zugangsdaten oder Garmin-Antwort prüfen).",
+            ) from None
+
+        challenge_id = f"real-{uuid4().hex}"
+        expires = time.monotonic() + self.CHALLENGE_TTL_SEC
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=self.CHALLENGE_TTL_SEC)
+
+        needs_mfa = isinstance(result, dict) and result.get("needs_mfa")
+        if needs_mfa:
+            self._challenges[challenge_id] = {
+                "client_state": result["client_state"],
+                "expires": expires,
+            }
+            message = "Garmin-MFA erforderlich. 2FA-Code senden, um den Login abzuschliessen."
+        else:
+            # Kein MFA nötig: Login ist bereits abgeschlossen (result = oauth-Tupel).
+            self._challenges[challenge_id] = {
+                "completed": True,
+                "expires": expires,
+            }
+            message = "Garmin-Login ohne MFA abgeschlossen. /auth/complete zum Finalisieren aufrufen."
+
+        return {
+            "mode": "real",
+            "mfaRequired": bool(needs_mfa),
+            "challengeId": challenge_id,
+            "expiresAt": _iso(expires_at),
+            "message": message,
+        }
 
     def complete_auth(self, challenge_id: str, mfa_code: str) -> dict:
         self._ensure_ready()
-        return self._not_implemented()
+        self._prune_challenges()
+
+        import garth  # lokal, da optionales Paket
+
+        challenge = self._challenges.get(challenge_id)
+        if not challenge:
+            raise HTTPException(
+                status_code=400,
+                detail="Unbekannte oder abgelaufene Challenge. Login neu starten.",
+            )
+
+        try:
+            if not challenge.get("completed"):
+                # MFA fortsetzen: schliesst den Login mit dem Code ab.
+                garth.resume_login(challenge["client_state"], mfa_code)
+
+            secrets = self._session_to_secrets(garth.client)
+            external_user_id = self._external_user_id(garth.client)
+        except HTTPException:
+            raise
+        except Exception as err:  # noqa: BLE001
+            logger.warning("Garmin-MFA/Abschluss fehlgeschlagen: %s", type(err).__name__)
+            raise HTTPException(
+                status_code=502,
+                detail="Garmin-Login-Abschluss fehlgeschlagen (MFA-Code oder Session prüfen).",
+            ) from None
+        finally:
+            self._challenges.pop(challenge_id, None)
+
+        return {
+            "externalUserId": external_user_id,
+            "displayName": external_user_id,
+            "connectedAt": _iso(datetime.now(timezone.utc)),
+            "secrets": secrets,
+        }
+
+    def _data_not_implemented(self) -> dict:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Echter Garmin-Datenabruf folgt in feat/garmin-real-data-mapping. "
+                "Der Login (start/complete) ist bereits aktiv."
+            ),
+        )
 
     def activities(self, seed: str, from_: str, to: str) -> dict:
         self._ensure_ready()
-        return self._not_implemented()
+        return self._data_not_implemented()
 
     def daily_health(self, seed: str, from_: str, to: str) -> dict:
         self._ensure_ready()
-        return self._not_implemented()
+        return self._data_not_implemented()
 
     def sleep(self, seed: str, from_: str, to: str) -> dict:
         self._ensure_ready()
-        return self._not_implemented()
+        return self._data_not_implemented()
 
 
 def is_stub_mode() -> bool:
