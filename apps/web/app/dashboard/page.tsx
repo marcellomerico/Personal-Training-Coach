@@ -6,6 +6,7 @@ import {
   ApiError,
   completeGarminAuth,
   createTelegramLinkToken,
+  enqueueGarminSync,
   getActivities,
   getDailyHealth,
   getGarminStatus,
@@ -60,6 +61,7 @@ export default function DashboardPage() {
   const [telegramToken, setTelegramToken] = useState<TelegramLinkToken | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [enqueuing, setEnqueuing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [linking, setLinking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -215,6 +217,25 @@ export default function DashboardPage() {
     }
   }
 
+  // Async-Variante: reiht den Sync im Worker ein, wartet nicht auf das Ergebnis.
+  // Der Job erscheint sofort als "Wartet"; Status per "Aktualisieren" verfolgen.
+  async function onEnqueueSync() {
+    setError(null);
+    setNotice(null);
+    setEnqueuing(true);
+    try {
+      const res = await enqueueGarminSync();
+      setNotice(
+        `Sync im Hintergrund eingereiht (Job ${res.syncJob.id}). Status über „Aktualisieren" verfolgen.`,
+      );
+      await loadData();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Einreihen fehlgeschlagen');
+    } finally {
+      setEnqueuing(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="center-screen">
@@ -333,6 +354,9 @@ export default function DashboardPage() {
             )}
             <button className="primary" style={{ width: 'auto' }} onClick={onSync} disabled={syncing}>
               {syncing ? 'Sync läuft …' : '3 · Sync starten'}
+            </button>
+            <button onClick={onEnqueueSync} disabled={enqueuing}>
+              {enqueuing ? 'Reihe ein …' : '3b · Sync im Hintergrund'}
             </button>
           </div>
         </div>

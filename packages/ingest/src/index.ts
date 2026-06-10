@@ -17,6 +17,21 @@ export interface SyncContext {
   since: Date | null;
 }
 
+/**
+ * Queue-Contract für den asynchronen Garmin-Sync über pg-boss.
+ * Geteilt zwischen API (Producer: legt Job an) und Worker (Consumer:
+ * verarbeitet ihn und aktualisiert denselben SyncJob via `syncJobId`).
+ */
+export const GARMIN_SYNC_QUEUE = 'garmin-sync';
+
+export interface GarminSyncJobData {
+  userId: string;
+  providerAccountId: string;
+  externalUserId: string | null;
+  since?: string | null;
+  syncJobId?: string | null;
+}
+
 export interface SyncStats {
   rawImports: number;
   activities: number;

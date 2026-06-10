@@ -9,6 +9,7 @@ import { GarminConnector } from '@ptc/connectors';
 import { runTrackedGarminSync, type SyncStats } from '@ptc/ingest';
 import { Prisma, type SyncJob } from '@ptc/db';
 import { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from '../queue/queue.service';
 
 const GARMIN_PROVIDER = 'garmin_unofficial' as const;
 
@@ -67,7 +68,10 @@ export class GarminService {
   private readonly env = loadEnv();
   private readonly logger = createLogger('garmin');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly queue: QueueService,
+  ) {}
 
   async startAuth(body: { email?: string }): Promise<GarminAuthStartResult> {
     return this.connector().startAuth(body);
@@ -178,6 +182,45 @@ export class GarminService {
       this.logger,
     );
     return { stats: result.stats, syncJob: this.toSyncJobSummary(result.syncJob) };
+  }
+
+  /**
+   * Legt einen `queued` SyncJob an und sendet ihn an den Worker (pg-boss).
+   * Der Worker aktualisiert denselben SyncJob via `syncJobId` auf
+   * running -> success/failed. Antwortet sofort, ohne auf den Sync zu warten.
+   */
+  async enqueueSync(userId: string, since: Date | null): Promise<SyncJobSummary> {
+    const account = await this.prisma.providerAccount.findUnique({
+      where: { userId_provider: { userId, provider: GARMIN_PROVIDER } },
+    });
+    if (!account) {
+      throw new BadRequestException(
+        'Garmin ist nicht verbunden. Zuerst den Garmin-Auth-Flow abschliessen.',
+      );
+    }
+
+    const job = await this.prisma.syncJob.create({
+      data: {
+        userId,
+        providerAccountId: account.id,
+        type: 'incremental',
+        status: 'queued',
+        rangeFrom: since,
+        rangeTo: new Date(),
+        attempt: 0,
+      },
+    });
+
+    await this.queue.enqueueGarminSync({
+      userId,
+      providerAccountId: account.id,
+      externalUserId: account.externalUserId,
+      since: since ? since.toISOString() : null,
+      syncJobId: job.id,
+    });
+
+    this.logger.info({ syncJobId: job.id, userId }, 'Garmin-Sync eingereiht');
+    return this.toSyncJobSummary(job);
   }
 
   async latestSyncJobs(userId: string, limit = 5): Promise<SyncJobSummary[]> {
