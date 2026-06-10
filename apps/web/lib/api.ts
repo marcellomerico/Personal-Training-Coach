@@ -142,3 +142,8 @@ export function getSleep(limit = 7): Promise<SleepRecord[]> {
 export function getLatestReadiness(): Promise<ReadinessMetric | null> {
   return request('/readiness/latest');
 }
+
+/** Letzte Tagesbewertungen, neueste zuerst. */
+export function getReadinessHistory(limit = 14): Promise<ReadinessMetric[]> {
+  return request(`/readiness/history?limit=${limit}`);
+}

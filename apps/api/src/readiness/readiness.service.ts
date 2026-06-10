@@ -27,4 +27,13 @@ export class ReadinessService {
       orderBy: { date: 'desc' },
     });
   }
+
+  /** Liefert die letzten Readiness-Werte, neueste zuerst. */
+  history(userId: string, limit = 14) {
+    return this.prisma.readinessMetric.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take: Math.min(Math.max(limit, 1), 60),
+    });
+  }
 }
