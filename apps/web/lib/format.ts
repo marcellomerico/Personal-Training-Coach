@@ -34,6 +34,18 @@ export function fmtDistance(m: number | null): string {
   return `${Math.round(m)} m`;
 }
 
+/** Verständliche Ablaufanzeige: "noch 14 Min. (15:23 Uhr)" bzw. "abgelaufen". */
+export function fmtExpiresIn(iso: string | null): string {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '–';
+  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const diffMs = d.getTime() - Date.now();
+  if (diffMs <= 0) return `abgelaufen (${time} Uhr)`;
+  const mins = Math.max(1, Math.round(diffMs / 60000));
+  return `noch ${mins} Min. (${time} Uhr)`;
+}
+
 export function fmtNum(v: number | null, unit = ''): string {
   if (v == null) return '–';
   const s = v.toLocaleString('de-DE', { maximumFractionDigits: 1 });

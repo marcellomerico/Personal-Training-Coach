@@ -9,6 +9,7 @@ import type {
   SleepRecord,
   SyncJobSummary,
   SyncStats,
+  TelegramLinkToken,
 } from './types';
 
 // Basis-URL der NestJS-API. Im Dev läuft sie auf Port 3001; die API erlaubt
@@ -85,6 +86,11 @@ export function login(body: {
 
 export function logout(): Promise<void> {
   return request('/auth/logout', { method: 'POST' });
+}
+
+/** Erzeugt einen Einmal-Token (+ Deep-Link) zur Telegram-Verknüpfung. */
+export function createTelegramLinkToken(): Promise<TelegramLinkToken> {
+  return request('/auth/telegram/link-token', { method: 'POST' });
 }
 
 // --- Status ----------------------------------------------------------------
