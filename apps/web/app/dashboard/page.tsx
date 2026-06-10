@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     const [a, h, s, r, history, jobs] = await Promise.all([
@@ -162,6 +163,33 @@ export default function DashboardPage() {
     }
   }
 
+  // Lädt /auth/me und die Daten neu – ohne kompletten Browser-Neustart.
+  // Wird u. a. nach der Telegram-Verknüpfung genutzt, damit der Status
+  // "Telegram verknüpft" sofort sichtbar wird.
+  async function onRefresh() {
+    setError(null);
+    setNotice(null);
+    setRefreshing(true);
+    try {
+      const me = await getMe();
+      setUser(me.user);
+      await loadData();
+      setNotice(
+        me.user.telegramUserId
+          ? 'Status aktualisiert – Telegram ist verknüpft.'
+          : 'Status aktualisiert.',
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        router.replace('/login');
+        return;
+      }
+      setError(err instanceof ApiError ? err.message : 'Aktualisieren fehlgeschlagen');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function onSync() {
     setError(null);
     setNotice(null);
@@ -205,6 +233,9 @@ export default function DashboardPage() {
         <span className="muted" style={{ fontSize: 14 }}>
           {user?.displayName || user?.email}
         </span>
+        <button onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? 'Aktualisiere …' : 'Aktualisieren'}
+        </button>
         <button onClick={onLogout}>Logout</button>
       </div>
 
@@ -289,7 +320,9 @@ export default function DashboardPage() {
           telegramUserId={user?.telegramUserId ?? null}
           token={telegramToken}
           linking={linking}
+          refreshing={refreshing}
           onLink={onLinkTelegram}
+          onCheckLink={onRefresh}
         />
 
         <SyncJobsCard jobs={syncJobs} />
@@ -400,13 +433,17 @@ function TelegramCard({
   telegramUserId,
   token,
   linking,
+  refreshing,
   onLink,
+  onCheckLink,
 }: {
   connected: boolean;
   telegramUserId: string | null;
   token: TelegramLinkToken | null;
   linking: boolean;
+  refreshing: boolean;
   onLink: () => void;
+  onCheckLink: () => void;
 }) {
   return (
     <div className="card">
@@ -427,6 +464,11 @@ function TelegramCard({
         <button onClick={onLink} disabled={linking}>
           {linking ? 'Erzeuge Link …' : 'Telegram verknüpfen'}
         </button>
+        {token && !connected && (
+          <button onClick={onCheckLink} disabled={refreshing}>
+            {refreshing ? 'Prüfe …' : 'Verknüpfung prüfen'}
+          </button>
+        )}
       </div>
 
       {token && (
@@ -451,6 +493,11 @@ function TelegramCard({
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             Gültig {fmtExpiresIn(token.expiresAt)}
           </div>
+          {!connected && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Nach Bestätigung im Bot „Verknüpfung prüfen" klicken.
+            </div>
+          )}
         </div>
       )}
     </div>
