@@ -66,6 +66,10 @@ stop_port() {
   done
 }
 
+# Stoppt lokale Dev-Prozesse DIESES Repos. Lokale Dev-Aktion: trifft nur
+# Prozesse, die sowohl ein Dev-Pattern matchen ALS AUCH dieses Repo
+# referenzieren (Pfad unter ROOT_DIR oder ein @ptc/-Scope) – damit keine
+# fremden pnpm/turbo-Prozesse anderer Projekte beendet werden.
 stop_matching_project_processes() {
   local pid command
   local patterns=(
@@ -86,6 +90,8 @@ stop_matching_project_processes() {
   while read -r pid command; do
     [ -n "${pid:-}" ] || continue
     [ "$pid" != "$$" ] || continue
+    # Repo-Scope: Prozess muss dieses Repo referenzieren.
+    [[ "$command" == *"$ROOT_DIR"* || "$command" == *"@ptc/"* ]] || continue
 
     for pattern in "${patterns[@]}"; do
       if [[ "$command" == *"$pattern"* ]]; then
@@ -119,6 +125,8 @@ require_command pgrep
 log "Stopping existing local dev services..."
 stop_matching_project_processes
 sleep 1
+# Lokale Dev-Aktion: belegt etwas die lokalen Dev-Ports (Web/API/Connector),
+# wird es beendet. Nur für die lokale Entwicklung gedacht.
 stop_port "web" "$WEB_PORT"
 stop_port "api" "${API_PORT:-3001}"
 stop_port "garmin connector" "${GARMIN_CONNECTOR_PORT:-8000}"

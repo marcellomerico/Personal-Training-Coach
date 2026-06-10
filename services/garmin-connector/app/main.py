@@ -7,6 +7,7 @@ end-to-end testbar ist. Der echte Login (garth/garminconnect, inkl. MFA) wird
 im Real-Provider ergänzt, ohne dass sich dieses HTTP-Interface ändert.
 """
 
+import json
 import os
 from typing import Optional
 
@@ -58,13 +59,29 @@ def complete_auth(body: AuthCompleteRequest) -> dict:
     return provider.complete_auth(body.challenge_id, body.mfa_code)
 
 
+def parse_session(x_garmin_session: Optional[str] = Header(default=None)) -> Optional[dict]:
+    """Liest die von der API mitgesendete, entschlüsselte Provider-Session.
+
+    Wird als JSON-String im `x-garmin-session`-Header übertragen. Im Stub-Modus
+    optional; der Real-Provider benötigt sie für den zustandslosen Datenabruf.
+    """
+    if not x_garmin_session:
+        return None
+    try:
+        data = json.loads(x_garmin_session)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="x-garmin-session ist kein gültiges JSON")
+    return data if isinstance(data, dict) else None
+
+
 @app.get("/activities", dependencies=[Depends(require_internal_key)])
 def get_activities(
     from_: str = Query(..., alias="from"),
     to: str = Query(...),
     seed: str = Query("default"),
+    session: Optional[dict] = Depends(parse_session),
 ) -> dict:
-    return provider.activities(seed, from_, to)
+    return provider.activities(seed, from_, to, session)
 
 
 @app.get("/daily-health", dependencies=[Depends(require_internal_key)])
@@ -72,8 +89,9 @@ def get_daily_health(
     from_: str = Query(..., alias="from"),
     to: str = Query(...),
     seed: str = Query("default"),
+    session: Optional[dict] = Depends(parse_session),
 ) -> dict:
-    return provider.daily_health(seed, from_, to)
+    return provider.daily_health(seed, from_, to, session)
 
 
 @app.get("/sleep", dependencies=[Depends(require_internal_key)])
@@ -81,5 +99,6 @@ def get_sleep(
     from_: str = Query(..., alias="from"),
     to: str = Query(...),
     seed: str = Query("default"),
+    session: Optional[dict] = Depends(parse_session),
 ) -> dict:
-    return provider.sleep(seed, from_, to)
+    return provider.sleep(seed, from_, to, session)

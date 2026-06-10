@@ -66,16 +66,31 @@ def _gmt_to_iso(value: Any) -> Optional[str]:
     return None
 
 
-def make_client() -> Any:
-    """garminconnect-Client, der die bestehende garth-Session wiederverwendet."""
-    import garminconnect
-    import garth
+def make_client(session: dict) -> Any:
+    """Stellt einen garminconnect-Client aus der übergebenen Session her.
 
-    client = garminconnect.Garmin()
-    # garminconnect nutzt intern garth; die bereits eingeloggte Session
-    # wiederverwenden, statt erneut einzuloggen.
-    client.garth = garth.client
-    return client
+    Die Session ist die von der API entschlüsselte `provider_accounts.secrets`
+    (z. B. ein garth-Token-String). Sie wird hier **nicht** aus globalem
+    Prozess-State gelesen, sondern pro Request übergeben – damit ist der
+    Datenabruf zustandslos und prozess-/worker-unabhängig.
+
+    TODO(garmin-real-login): an die verifizierte garminconnect-API anbinden
+    (z. B. `Garmin(); client.garth.loads(token)` bzw. Tokenstore-Login der
+    aktuellen Library-Version). Bewusst noch nicht aktiv, damit kein
+    ungetesteter, falscher Library-Aufruf ausgeführt wird. Das Mapping unten ist
+    fertig und unit-getestet; nur die Session-Wiederherstellung fehlt.
+    """
+    from fastapi import HTTPException
+
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Garmin Real-Datenabruf: Session-Wiederherstellung ist noch nicht an "
+            "die verifizierte garminconnect-API angebunden (TODO). Die "
+            "Session-Übergabe-Architektur steht; bitte lokal mit echtem Account "
+            "implementieren/testen."
+        ),
+    )
 
 
 # --- Aktivitäten -----------------------------------------------------------

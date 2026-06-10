@@ -55,6 +55,7 @@ export const garminAuthStartResponseSchema = z.object({
 });
 
 export const garminAuthCompleteResponseSchema = z.object({
+  mode: z.enum(['stub', 'real']).optional(),
   externalUserId: z.string(),
   displayName: z.string().nullable().optional(),
   connectedAt: z.string(),

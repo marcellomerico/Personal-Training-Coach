@@ -48,13 +48,13 @@ class GarminProvider(ABC):
     def complete_auth(self, challenge_id: str, mfa_code: str) -> dict: ...
 
     @abstractmethod
-    def activities(self, seed: str, from_: str, to: str) -> dict: ...
+    def activities(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict: ...
 
     @abstractmethod
-    def daily_health(self, seed: str, from_: str, to: str) -> dict: ...
+    def daily_health(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict: ...
 
     @abstractmethod
-    def sleep(self, seed: str, from_: str, to: str) -> dict: ...
+    def sleep(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict: ...
 
 
 class StubGarminProvider(GarminProvider):
@@ -81,6 +81,7 @@ class StubGarminProvider(GarminProvider):
         connected_at = datetime.now(timezone.utc)
         session_id = challenge_id.removeprefix("stub-")[:16]
         return {
+            "mode": "stub",
             "externalUserId": f"stub-garmin-{session_id}",
             "displayName": "Garmin Stub Account",
             "connectedAt": _iso(connected_at),
@@ -92,13 +93,14 @@ class StubGarminProvider(GarminProvider):
             },
         }
 
-    def activities(self, seed: str, from_: str, to: str) -> dict:
+    # Der Stub ignoriert die Session (deterministische Daten je seed).
+    def activities(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict:
         return {"activities": stub_data.activities(seed, from_, to)}
 
-    def daily_health(self, seed: str, from_: str, to: str) -> dict:
+    def daily_health(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict:
         return {"metrics": stub_data.daily_health(seed, from_, to)}
 
-    def sleep(self, seed: str, from_: str, to: str) -> dict:
+    def sleep(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict:
         return {"sleep": stub_data.sleep(seed, from_, to)}
 
 
@@ -114,14 +116,11 @@ class RealGarminProvider(GarminProvider):
     mode = "real"
     REQUIRED_PACKAGES = ("garth", "garminconnect")
     REQUIRED_CREDENTIALS = ("GARMIN_EMAIL", "GARMIN_PASSWORD")
-    CHALLENGE_TTL_SEC = 10 * 60
 
     def __init__(self) -> None:
         self.missing_packages = [
             pkg for pkg in self.REQUIRED_PACKAGES if importlib.util.find_spec(pkg) is None
         ]
-        # Login-Zwischenzustände (MFA) je challengeId; nur im Prozess, kurzlebig.
-        self._challenges: dict[str, dict] = {}
 
     def _ensure_ready(self) -> None:
         if self.missing_packages:
@@ -145,135 +144,49 @@ class RealGarminProvider(GarminProvider):
                 ),
             )
 
-    def _prune_challenges(self) -> None:
-        now = time.monotonic()
-        expired = [cid for cid, c in self._challenges.items() if c["expires"] < now]
-        for cid in expired:
-            self._challenges.pop(cid, None)
-
-    @staticmethod
-    def _session_to_secrets(garth_client) -> dict:
-        """Serialisiert die garth-Session als Token-String (kein Passwort)."""
-        token = garth_client.dumps()
-        return {
-            "mode": "real",
-            "provider": "garth",
-            "session": token,
-            "issuedAt": _iso(datetime.now(timezone.utc)),
-        }
-
-    @staticmethod
-    def _external_user_id(garth_client) -> str:
-        # garth.client.username ist der Garmin-Connect-Benutzername.
-        username = getattr(garth_client, "username", None)
-        if not username:
-            profile = getattr(garth_client, "profile", None) or {}
-            username = profile.get("userName") or profile.get("displayName")
-        return str(username) if username else "garmin-user"
+    def _login_todo(self) -> dict:
+        # TODO(garmin-real-login): an die verifizierte Library-API anbinden.
+        # Die frühere garth-Variante (garth.login(return_on_mfa=...)/resume_login)
+        # entsprach nicht der aktuellen API (garth gilt zudem als deprecated).
+        # Geplant: garminconnect >= 0.3.x Native-Auth mit Tokenstore.
+        # Bis dahin bewusst deaktiviert, damit kein ungetesteter, falscher
+        # Login-Code ausgeführt wird. Architektur (Session-Persistenz) steht.
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Echter Garmin-Login ist noch nicht an die verifizierte "
+                "garminconnect-API angebunden (TODO). Bitte lokal mit echtem "
+                "Account implementieren/testen. Stub-Modus funktioniert."
+            ),
+        )
 
     def start_auth(self, email: Optional[str]) -> dict:
         self._ensure_ready()
-        self._prune_challenges()
-
-        import garth  # lokal, da optionales Paket
-
-        garmin_email = os.environ["GARMIN_EMAIL"]
-        garmin_password = os.environ["GARMIN_PASSWORD"]
-
-        try:
-            # return_on_mfa=True -> garth bricht vor der MFA ab und gibt den
-            # Zwischenzustand zurück, statt interaktiv zu fragen.
-            result = garth.login(garmin_email, garmin_password, return_on_mfa=True)
-        except Exception as err:  # noqa: BLE001 - Fehler kontrolliert melden
-            # Wichtig: niemals Passwort/E-Mail in die Fehlermeldung aufnehmen.
-            logger.warning("Garmin-Login fehlgeschlagen: %s", type(err).__name__)
-            raise HTTPException(
-                status_code=502,
-                detail="Garmin-Login fehlgeschlagen (Zugangsdaten oder Garmin-Antwort prüfen).",
-            ) from None
-
-        challenge_id = f"real-{uuid4().hex}"
-        expires = time.monotonic() + self.CHALLENGE_TTL_SEC
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=self.CHALLENGE_TTL_SEC)
-
-        needs_mfa = isinstance(result, dict) and result.get("needs_mfa")
-        if needs_mfa:
-            self._challenges[challenge_id] = {
-                "client_state": result["client_state"],
-                "expires": expires,
-            }
-            message = "Garmin-MFA erforderlich. 2FA-Code senden, um den Login abzuschliessen."
-        else:
-            # Kein MFA nötig: Login ist bereits abgeschlossen (result = oauth-Tupel).
-            self._challenges[challenge_id] = {
-                "completed": True,
-                "expires": expires,
-            }
-            message = "Garmin-Login ohne MFA abgeschlossen. /auth/complete zum Finalisieren aufrufen."
-
-        return {
-            "mode": "real",
-            "mfaRequired": bool(needs_mfa),
-            "challengeId": challenge_id,
-            "expiresAt": _iso(expires_at),
-            "message": message,
-        }
+        return self._login_todo()
 
     def complete_auth(self, challenge_id: str, mfa_code: str) -> dict:
         self._ensure_ready()
-        self._prune_challenges()
+        return self._login_todo()
 
-        import garth  # lokal, da optionales Paket
-
-        challenge = self._challenges.get(challenge_id)
-        if not challenge:
+    def _require_session(self, session: Optional[dict]) -> dict:
+        if not session:
             raise HTTPException(
-                status_code=400,
-                detail="Unbekannte oder abgelaufene Challenge. Login neu starten.",
+                status_code=401,
+                detail=(
+                    "Garmin-Session fehlt. Die API muss die entschlüsselte Session "
+                    "(x-garmin-session) mitsenden – zuerst Auth abschliessen."
+                ),
             )
+        return session
 
-        try:
-            if not challenge.get("completed"):
-                # MFA fortsetzen: schliesst den Login mit dem Code ab.
-                garth.resume_login(challenge["client_state"], mfa_code)
-
-            secrets = self._session_to_secrets(garth.client)
-            external_user_id = self._external_user_id(garth.client)
-        except HTTPException:
-            raise
-        except Exception as err:  # noqa: BLE001
-            logger.warning("Garmin-MFA/Abschluss fehlgeschlagen: %s", type(err).__name__)
-            raise HTTPException(
-                status_code=502,
-                detail="Garmin-Login-Abschluss fehlgeschlagen (MFA-Code oder Session prüfen).",
-            ) from None
-        finally:
-            self._challenges.pop(challenge_id, None)
-
-        return {
-            "externalUserId": external_user_id,
-            "displayName": external_user_id,
-            "connectedAt": _iso(datetime.now(timezone.utc)),
-            "secrets": secrets,
-        }
-
-    def _data_client(self):
-        """garminconnect-Client auf Basis der bestehenden garth-Session."""
+    def _fetch(self, kind: str, key: str, from_: str, to: str, session: Optional[dict]) -> dict:
         from . import real_garmin
 
-        try:
-            return real_garmin.make_client()
-        except Exception as err:  # noqa: BLE001
-            logger.warning("Garmin-Datenclient nicht verfügbar: %s", type(err).__name__)
-            raise HTTPException(
-                status_code=502,
-                detail="Garmin-Session nicht verfügbar. Zuerst /auth/start + /auth/complete ausführen.",
-            ) from None
-
-    def _fetch(self, kind: str, key: str, from_: str, to: str) -> dict:
-        from . import real_garmin
-
-        client = self._data_client()
+        session = self._require_session(session)
+        # make_client stellt die garminconnect-Session aus `session` wieder her.
+        # Die konkrete Library-Anbindung ist noch TODO (siehe real_garmin); bis
+        # dahin liefert sie einen kontrollierten 501. Mapping ist bereits aktiv.
+        client = real_garmin.make_client(session)
         fetchers = {
             "activities": real_garmin.fetch_activities,
             "metrics": real_garmin.fetch_daily_health,
@@ -281,6 +194,8 @@ class RealGarminProvider(GarminProvider):
         }
         try:
             return {key: fetchers[kind](client, from_, to)}
+        except HTTPException:
+            raise
         except Exception as err:  # noqa: BLE001
             logger.warning("Garmin-%s-Abruf fehlgeschlagen: %s", kind, type(err).__name__)
             raise HTTPException(
@@ -288,17 +203,17 @@ class RealGarminProvider(GarminProvider):
                 detail=f"Garmin-Datenabruf ({kind}) fehlgeschlagen.",
             ) from None
 
-    def activities(self, seed: str, from_: str, to: str) -> dict:
+    def activities(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict:
         self._ensure_ready()
-        return self._fetch("activities", "activities", from_, to)
+        return self._fetch("activities", "activities", from_, to, session)
 
-    def daily_health(self, seed: str, from_: str, to: str) -> dict:
+    def daily_health(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict:
         self._ensure_ready()
-        return self._fetch("metrics", "metrics", from_, to)
+        return self._fetch("metrics", "metrics", from_, to, session)
 
-    def sleep(self, seed: str, from_: str, to: str) -> dict:
+    def sleep(self, seed: str, from_: str, to: str, session: Optional[dict]) -> dict:
         self._ensure_ready()
-        return self._fetch("sleep", "sleep", from_, to)
+        return self._fetch("sleep", "sleep", from_, to, session)
 
 
 def is_stub_mode() -> bool:
