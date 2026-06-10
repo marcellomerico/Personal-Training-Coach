@@ -66,6 +66,20 @@ Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
 Import-Flow (nach Login): `POST /providers/garmin/connect` → `POST /sync/garmin` →
 Daten lesen via `GET /activities`, `GET /daily-health`, `GET /sleep`.
 
+## Provider-Secrets
+
+Tokens und Sessiondaten von externen Anbietern dürfen nicht im Klartext gespeichert
+werden. Das Package `@ptc/config` stellt dafür `encryptSecret`,
+`decryptSecret`, `encryptJsonSecret` und `decryptJsonSecret` bereit. Die
+Funktionen nutzen `ENCRYPTION_KEY` und speichern Werte im versionierten
+`ptc:v1`-Format, damit spätere Migrationen möglich bleiben.
+
+Vor echter Garmin-/Strava-Anbindung muss `ENCRYPTION_KEY` gesetzt sein:
+
+```bash
+openssl rand -base64 32
+```
+
 ## Readiness / Coach-MVP (Phase 5)
 
 Nach jedem Garmin-Sync berechnet das System automatisch eine **Tagesbewertung**
@@ -93,8 +107,7 @@ pnpm run test
 ```
 
 Aktuell testet `pnpm run test` die deterministische Readiness-Engine im Package
-`@ptc/analysis` (guter Tag, schlechter Tag, Baselines, Sleep-Fallback,
-Entscheidungsgrenzen und Begründungs-Summary).
+`@ptc/analysis` und die Provider-Secret-Verschlüsselung in `@ptc/config`.
 
 ## Hinweise
 
