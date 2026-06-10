@@ -52,6 +52,16 @@ export interface GarminSyncResult {
   syncJob: SyncJobSummary;
 }
 
+export interface GarminConnectionStatus {
+  connected: boolean;
+  providerAccountId: string | null;
+  status: string | null;
+  authMode: string | null;
+  externalUserId: string | null;
+  connectedAt: Date | null;
+  lastSyncAt: Date | null;
+}
+
 @Injectable()
 export class GarminService {
   private readonly env = loadEnv();
@@ -113,6 +123,36 @@ export class GarminService {
       update: { status: 'connected' },
     });
     return { providerAccountId: account.id, status: account.status };
+  }
+
+  /**
+   * Liefert den Verbindungsstatus des Garmin-Accounts direkt aus dem
+   * ProviderAccount – unabhängig davon, ob schon Daten gesynct wurden.
+   */
+  async getStatus(userId: string): Promise<GarminConnectionStatus> {
+    const account = await this.prisma.providerAccount.findUnique({
+      where: { userId_provider: { userId, provider: GARMIN_PROVIDER } },
+    });
+    if (!account) {
+      return {
+        connected: false,
+        providerAccountId: null,
+        status: null,
+        authMode: null,
+        externalUserId: null,
+        connectedAt: null,
+        lastSyncAt: null,
+      };
+    }
+    return {
+      connected: account.status === 'connected',
+      providerAccountId: account.id,
+      status: account.status,
+      authMode: account.authMode,
+      externalUserId: account.externalUserId,
+      connectedAt: account.connectedAt,
+      lastSyncAt: account.lastSyncAt,
+    };
   }
 
   /** Startet einen synchronen Sync (Stub) und liefert die Import-Statistik. */
