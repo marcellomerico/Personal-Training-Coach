@@ -10,6 +10,14 @@ export interface SafeUser {
   displayName: string | null;
 }
 
+// Antwort von POST /auth/telegram/link-token. deepLink ist null, wenn
+// TELEGRAM_BOT_USERNAME in der API nicht gesetzt ist.
+export interface TelegramLinkToken {
+  token: string;
+  deepLink: string | null;
+  expiresAt: string;
+}
+
 export interface Activity {
   id: string;
   source: string;

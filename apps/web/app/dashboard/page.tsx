@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ApiError,
   completeGarminAuth,
+  createTelegramLinkToken,
   getActivities,
   getDailyHealth,
   getGarminSyncJobs,
@@ -17,7 +18,14 @@ import {
   startGarminAuth,
   syncGarmin,
 } from '@/lib/api';
-import { fmtDate, fmtDateTime, fmtDistance, fmtDuration, fmtNum } from '@/lib/format';
+import {
+  fmtDate,
+  fmtDateTime,
+  fmtDistance,
+  fmtDuration,
+  fmtExpiresIn,
+  fmtNum,
+} from '@/lib/format';
 import type {
   Activity,
   DailyHealthMetric,
@@ -27,6 +35,7 @@ import type {
   SleepRecord,
   SyncJobSummary,
   SyncStats,
+  TelegramLinkToken,
 } from '@/lib/types';
 
 export default function DashboardPage() {
@@ -45,9 +54,11 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [garminChallengeId, setGarminChallengeId] = useState<string | null>(null);
   const [garminMfaCode, setGarminMfaCode] = useState('000000');
+  const [telegramToken, setTelegramToken] = useState<TelegramLinkToken | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   const loadData = useCallback(async () => {
     const [a, h, s, r, history, jobs] = await Promise.all([
@@ -132,6 +143,25 @@ export default function DashboardPage() {
     }
   }
 
+  async function onLinkTelegram() {
+    setError(null);
+    setNotice(null);
+    setLinking(true);
+    try {
+      const res = await createTelegramLinkToken();
+      setTelegramToken(res);
+      setNotice(
+        res.deepLink
+          ? 'Telegram-Link erzeugt – öffne ihn, um die Verknüpfung zu bestätigen.'
+          : 'Token erzeugt. Für einen direkten Link muss TELEGRAM_BOT_USERNAME gesetzt sein.',
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Telegram-Link konnte nicht erstellt werden');
+    } finally {
+      setLinking(false);
+    }
+  }
+
   async function onSync() {
     setError(null);
     setNotice(null);
@@ -163,6 +193,9 @@ export default function DashboardPage() {
   const lastSleep = sleep[0] ?? null;
   const latestSyncJob = syncJobs[0] ?? null;
   const hasData = activities.length > 0 || health.length > 0 || sleep.length > 0;
+  // Garmin gilt als verbunden, sobald Daten existieren oder ein Sync erfolgreich war.
+  const garminConnected = hasData || syncJobs.some((job) => job.status === 'success');
+  const telegramConnected = user?.telegramUserId != null;
 
   return (
     <div className="container">
@@ -179,28 +212,56 @@ export default function DashboardPage() {
       {notice && <div className="notice">{notice}</div>}
 
       <div className="stack">
-        {/* Status + Aktionen */}
+        {/* Status-Übersicht (read-only) */}
         <div className="card">
           <div className="card-title">Status</div>
-          <div className="row" style={{ marginBottom: 14 }}>
-            <span>
-              <span className={`dot ${apiOk ? 'ok' : 'bad'}`} />
-              API {apiOk == null ? '…' : apiOk ? 'erreichbar' : 'offline'}
-            </span>
-            <span>
-              <span className={`dot ${hasData ? 'ok' : 'bad'}`} />
-              {hasData ? 'Daten vorhanden' : 'Keine Daten'}
-            </span>
-            <span className="muted">
-              Letzter Sync:{' '}
-              {latestSyncJob?.finishedAt
-                ? `${syncStatusText(latestSyncJob.status)} · ${fmtDateTime(latestSyncJob.finishedAt)}`
-                : '–'}
-            </span>
+          <div className="status-grid">
+            <StatusItem
+              label="API"
+              pending={apiOk == null}
+              ok={apiOk === true}
+              okText="erreichbar"
+              badText="offline"
+            />
+            <StatusItem
+              label="Daten"
+              ok={hasData}
+              okText="vorhanden"
+              badText="keine"
+            />
+            <StatusItem
+              label="Garmin"
+              ok={garminConnected}
+              okText="verbunden"
+              badText="nicht verbunden"
+            />
+            <StatusItem
+              label="Telegram"
+              ok={telegramConnected}
+              okText="verknüpft"
+              badText="nicht verknüpft"
+            />
           </div>
+          <hr className="divider" />
+          <div className="muted" style={{ fontSize: 14 }}>
+            Letzter Sync:{' '}
+            {latestSyncJob
+              ? `${syncStatusText(latestSyncJob.status)} · ${fmtDateTime(
+                  latestSyncJob.finishedAt ?? latestSyncJob.startedAt ?? latestSyncJob.createdAt,
+                )}`
+              : '–'}
+          </div>
+        </div>
+
+        {/* Garmin-Aktionen (Stub) */}
+        <div className="card">
+          <div className="card-title">Garmin</div>
+          <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+            Stub-Modus: Auth starten → MFA bestätigen (Stub-Code <code>000000</code>) → Sync.
+          </p>
           <div className="row">
             <button onClick={onConnect} disabled={connecting}>
-              {connecting ? 'Starte …' : 'Garmin Auth starten'}
+              {connecting ? 'Starte …' : '1 · Auth starten'}
             </button>
             {garminChallengeId && (
               <>
@@ -212,15 +273,24 @@ export default function DashboardPage() {
                   style={{ maxWidth: 140 }}
                 />
                 <button onClick={onCompleteGarminAuth} disabled={connecting || !garminMfaCode}>
-                  MFA bestätigen
+                  2 · MFA bestätigen
                 </button>
               </>
             )}
             <button className="primary" style={{ width: 'auto' }} onClick={onSync} disabled={syncing}>
-              {syncing ? 'Sync läuft …' : 'Garmin Sync starten'}
+              {syncing ? 'Sync läuft …' : '3 · Sync starten'}
             </button>
           </div>
         </div>
+
+        {/* Telegram-Verknüpfung */}
+        <TelegramCard
+          connected={telegramConnected}
+          telegramUserId={user?.telegramUserId ?? null}
+          token={telegramToken}
+          linking={linking}
+          onLink={onLinkTelegram}
+        />
 
         <SyncJobsCard jobs={syncJobs} />
 
@@ -296,6 +366,93 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="metric">
       <div className="label">{label}</div>
       <div className="value">{value}</div>
+    </div>
+  );
+}
+
+function StatusItem({
+  label,
+  ok,
+  okText,
+  badText,
+  pending = false,
+}: {
+  label: string;
+  ok: boolean;
+  okText: string;
+  badText: string;
+  pending?: boolean;
+}) {
+  const dotClass = pending ? 'dot' : ok ? 'dot ok' : 'dot bad';
+  return (
+    <div className="status-item">
+      <span className={dotClass} />
+      <div>
+        <div className="label">{label}</div>
+        <div className="state">{pending ? '…' : ok ? okText : badText}</div>
+      </div>
+    </div>
+  );
+}
+
+function TelegramCard({
+  connected,
+  telegramUserId,
+  token,
+  linking,
+  onLink,
+}: {
+  connected: boolean;
+  telegramUserId: string | null;
+  token: TelegramLinkToken | null;
+  linking: boolean;
+  onLink: () => void;
+}) {
+  return (
+    <div className="card">
+      <div className="card-title">Telegram</div>
+      {connected ? (
+        <p style={{ marginTop: 0, marginBottom: 12 }}>
+          <span className="dot ok" /> Verknüpft
+          {telegramUserId ? <span className="muted"> · ID {telegramUserId}</span> : null}. Ein neuer
+          Link verknüpft ein anderes Konto.
+        </p>
+      ) : (
+        <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+          Verknüpfe deinen Telegram-Account, um den Coach-Bot zu nutzen.
+        </p>
+      )}
+
+      <div className="row">
+        <button onClick={onLink} disabled={linking}>
+          {linking ? 'Erzeuge Link …' : 'Telegram verknüpfen'}
+        </button>
+      </div>
+
+      {token && (
+        <div className="metric" style={{ marginTop: 12 }}>
+          {token.deepLink ? (
+            <a href={token.deepLink} target="_blank" rel="noopener noreferrer">
+              In Telegram öffnen → /start
+            </a>
+          ) : (
+            <div className="stack">
+              <div className="muted" style={{ fontSize: 13 }}>
+                Kein direkter Link: setze <code>TELEGRAM_BOT_USERNAME</code> in der API-Umgebung.
+              </div>
+              <div style={{ fontSize: 14 }}>
+                Token: <code>{token.token}</code>
+              </div>
+              <div className="muted" style={{ fontSize: 13 }}>
+                Sende dem Bot manuell <code>/start {token.token}</code>.
+              </div>
+            </div>
+          )}
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Gültig {fmtExpiresIn(token.expiresAt)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
