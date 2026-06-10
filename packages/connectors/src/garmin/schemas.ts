@@ -46,6 +46,23 @@ export const activitiesResponseSchema = z.object({ activities: z.array(activityS
 export const healthResponseSchema = z.object({ metrics: z.array(dailyHealthSchema) });
 export const sleepResponseSchema = z.object({ sleep: z.array(sleepSchema) });
 
+export const garminAuthStartResponseSchema = z.object({
+  mode: z.literal('stub'),
+  mfaRequired: z.boolean(),
+  challengeId: z.string(),
+  expiresAt: z.string(),
+  message: z.string(),
+});
+
+export const garminAuthCompleteResponseSchema = z.object({
+  externalUserId: z.string(),
+  displayName: z.string().nullable().optional(),
+  connectedAt: z.string(),
+  secrets: z.record(z.unknown()),
+});
+
 export type ActivityPayload = z.infer<typeof activitySchema>;
 export type DailyHealthPayload = z.infer<typeof dailyHealthSchema>;
 export type SleepPayload = z.infer<typeof sleepSchema>;
+export type GarminAuthStartResponse = z.infer<typeof garminAuthStartResponseSchema>;
+export type GarminAuthCompleteResponse = z.infer<typeof garminAuthCompleteResponseSchema>;

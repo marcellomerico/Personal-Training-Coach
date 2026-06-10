@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ApiError,
-  connectGarmin,
+  completeGarminAuth,
   getActivities,
   getDailyHealth,
   getHealth,
@@ -12,6 +12,7 @@ import {
   getMe,
   getSleep,
   logout,
+  startGarminAuth,
   syncGarmin,
 } from '@/lib/api';
 import { fmtDate, fmtDateTime, fmtDistance, fmtDuration, fmtNum } from '@/lib/format';
@@ -37,6 +38,8 @@ export default function DashboardPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [garminChallengeId, setGarminChallengeId] = useState<string | null>(null);
+  const [garminMfaCode, setGarminMfaCode] = useState('000000');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -94,10 +97,27 @@ export default function DashboardPage() {
     setNotice(null);
     setConnecting(true);
     try {
-      await connectGarmin();
-      setNotice('Garmin verbunden (Stub). Jetzt Sync starten.');
+      const res = await startGarminAuth({ email: user?.email ?? undefined });
+      setGarminChallengeId(res.challengeId);
+      setNotice(`${res.message} Danach MFA bestätigen.`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Verbinden fehlgeschlagen');
+      setError(err instanceof ApiError ? err.message : 'Garmin-Auth konnte nicht gestartet werden');
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function onCompleteGarminAuth() {
+    if (!garminChallengeId) return;
+    setError(null);
+    setNotice(null);
+    setConnecting(true);
+    try {
+      await completeGarminAuth({ challengeId: garminChallengeId, mfaCode: garminMfaCode });
+      setGarminChallengeId(null);
+      setNotice('Garmin verbunden (Stub-MFA abgeschlossen). Jetzt Sync starten.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Garmin-MFA fehlgeschlagen');
     } finally {
       setConnecting(false);
     }
@@ -167,8 +187,22 @@ export default function DashboardPage() {
           </div>
           <div className="row">
             <button onClick={onConnect} disabled={connecting}>
-              {connecting ? 'Verbinde …' : 'Garmin verbinden'}
+              {connecting ? 'Starte …' : 'Garmin Auth starten'}
             </button>
+            {garminChallengeId && (
+              <>
+                <input
+                  aria-label="Garmin MFA-Code"
+                  value={garminMfaCode}
+                  onChange={(event) => setGarminMfaCode(event.target.value)}
+                  maxLength={12}
+                  style={{ maxWidth: 140 }}
+                />
+                <button onClick={onCompleteGarminAuth} disabled={connecting || !garminMfaCode}>
+                  MFA bestätigen
+                </button>
+              </>
+            )}
             <button className="primary" style={{ width: 'auto' }} onClick={onSync} disabled={syncing}>
               {syncing ? 'Sync läuft …' : 'Garmin Sync starten'}
             </button>

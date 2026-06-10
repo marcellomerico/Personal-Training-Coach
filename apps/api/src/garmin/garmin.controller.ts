@@ -11,11 +11,24 @@ import { GarminService } from './garmin.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SafeUser } from '../auth/auth.service';
 import { SessionGuard } from '../auth/session.guard';
+import { GarminAuthCompleteDto, GarminAuthStartDto } from './dto/garmin-auth.dto';
 
 @Controller()
 @UseGuards(SessionGuard)
 export class GarminController {
   constructor(private readonly garmin: GarminService) {}
+
+  @Post('providers/garmin/auth/start')
+  @HttpCode(200)
+  startAuth(@Body() body: GarminAuthStartDto) {
+    return this.garmin.startAuth(body);
+  }
+
+  @Post('providers/garmin/auth/complete')
+  @HttpCode(200)
+  completeAuth(@CurrentUser() user: SafeUser, @Body() body: GarminAuthCompleteDto) {
+    return this.garmin.completeAuth(user.id, body);
+  }
 
   @Post('providers/garmin/connect')
   @HttpCode(200)

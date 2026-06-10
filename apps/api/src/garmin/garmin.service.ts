@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { createLogger, loadEnv } from '@ptc/config';
+import {
+  createLogger,
+  encryptJsonSecret,
+  loadEnv,
+  SecretEncryptionError,
+} from '@ptc/config';
 import { GarminConnector } from '@ptc/connectors';
 import { runGarminSync, type SyncStats } from '@ptc/ingest';
 import { Prisma } from '@ptc/db';
@@ -13,12 +18,66 @@ export interface ListQuery {
   limit?: number;
 }
 
+export interface GarminAuthStartResult {
+  mode: 'stub';
+  mfaRequired: boolean;
+  challengeId: string;
+  expiresAt: string;
+  message: string;
+}
+
+export interface GarminAuthCompleteResult {
+  providerAccountId: string;
+  status: string;
+  externalUserId: string | null;
+  authMode: string;
+}
+
 @Injectable()
 export class GarminService {
   private readonly env = loadEnv();
   private readonly logger = createLogger('garmin');
 
   constructor(private readonly prisma: PrismaService) {}
+
+  async startAuth(body: { email?: string }): Promise<GarminAuthStartResult> {
+    return this.connector().startAuth(body);
+  }
+
+  async completeAuth(
+    userId: string,
+    body: { challengeId: string; mfaCode: string },
+  ): Promise<GarminAuthCompleteResult> {
+    const auth = await this.connector().completeAuth(body);
+    const encryptedSecrets = this.encryptProviderSecrets(auth.secrets);
+
+    const account = await this.prisma.providerAccount.upsert({
+      where: { userId_provider: { userId, provider: GARMIN_PROVIDER } },
+      create: {
+        userId,
+        provider: GARMIN_PROVIDER,
+        authMode: 'unofficial_stub',
+        externalUserId: auth.externalUserId,
+        status: 'connected',
+        secrets: encryptedSecrets,
+        connectedAt: new Date(auth.connectedAt),
+      },
+      update: {
+        authMode: 'unofficial_stub',
+        externalUserId: auth.externalUserId,
+        status: 'connected',
+        secrets: encryptedSecrets,
+        connectedAt: new Date(auth.connectedAt),
+      },
+    });
+
+    return {
+      providerAccountId: account.id,
+      status: account.status,
+      externalUserId: account.externalUserId,
+      authMode: account.authMode ?? 'unofficial_stub',
+    };
+  }
 
   /** Verbindet den (Stub-)Garmin-Account des Nutzers; idempotent. */
   async connect(userId: string): Promise<{ providerAccountId: string; status: string }> {
@@ -43,17 +102,14 @@ export class GarminService {
       where: { userId_provider: { userId, provider: GARMIN_PROVIDER } },
     });
     if (!account) {
-      throw new BadRequestException('Garmin ist nicht verbunden. Zuerst /providers/garmin/connect aufrufen.');
+      throw new BadRequestException(
+        'Garmin ist nicht verbunden. Zuerst den Garmin-Auth-Flow abschliessen.',
+      );
     }
-
-    const connector = new GarminConnector(
-      { baseUrl: this.env.GARMIN_CONNECTOR_URL, apiKey: this.env.INTERNAL_API_KEY },
-      GARMIN_PROVIDER,
-    );
 
     return runGarminSync(
       this.prisma,
-      connector,
+      this.connector(),
       {
         userId,
         providerAccountId: account.id,
@@ -102,5 +158,25 @@ export class GarminService {
     if (from) filter.gte = new Date(from);
     if (to) filter.lte = new Date(to);
     return filter;
+  }
+
+  private connector(): GarminConnector {
+    return new GarminConnector(
+      { baseUrl: this.env.GARMIN_CONNECTOR_URL, apiKey: this.env.INTERNAL_API_KEY },
+      GARMIN_PROVIDER,
+    );
+  }
+
+  private encryptProviderSecrets(secrets: unknown): string {
+    try {
+      return encryptJsonSecret(secrets);
+    } catch (err) {
+      if (err instanceof SecretEncryptionError) {
+        throw new BadRequestException(
+          'ENCRYPTION_KEY muss gesetzt sein, bevor Garmin-Secrets gespeichert werden koennen.',
+        );
+      }
+      throw err;
+    }
   }
 }

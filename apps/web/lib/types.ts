@@ -65,6 +65,21 @@ export interface HealthStatus {
   time: string;
 }
 
+export interface GarminAuthStartResult {
+  mode: 'stub';
+  mfaRequired: boolean;
+  challengeId: string;
+  expiresAt: string;
+  message: string;
+}
+
+export interface GarminAuthCompleteResult {
+  providerAccountId: string;
+  status: string;
+  externalUserId: string | null;
+  authMode: string;
+}
+
 export type ReadinessDecision = 'rest' | 'easy' | 'normal' | 'hard';
 
 export interface ReadinessRuleContribution {
