@@ -47,7 +47,7 @@ export const healthResponseSchema = z.object({ metrics: z.array(dailyHealthSchem
 export const sleepResponseSchema = z.object({ sleep: z.array(sleepSchema) });
 
 export const garminAuthStartResponseSchema = z.object({
-  mode: z.literal('stub'),
+  mode: z.enum(['stub', 'real']),
   mfaRequired: z.boolean(),
   challengeId: z.string(),
   expiresAt: z.string(),

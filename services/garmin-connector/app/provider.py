@@ -257,26 +257,48 @@ class RealGarminProvider(GarminProvider):
             "secrets": secrets,
         }
 
-    def _data_not_implemented(self) -> dict:
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "Echter Garmin-Datenabruf folgt in feat/garmin-real-data-mapping. "
-                "Der Login (start/complete) ist bereits aktiv."
-            ),
-        )
+    def _data_client(self):
+        """garminconnect-Client auf Basis der bestehenden garth-Session."""
+        from . import real_garmin
+
+        try:
+            return real_garmin.make_client()
+        except Exception as err:  # noqa: BLE001
+            logger.warning("Garmin-Datenclient nicht verfügbar: %s", type(err).__name__)
+            raise HTTPException(
+                status_code=502,
+                detail="Garmin-Session nicht verfügbar. Zuerst /auth/start + /auth/complete ausführen.",
+            ) from None
+
+    def _fetch(self, kind: str, key: str, from_: str, to: str) -> dict:
+        from . import real_garmin
+
+        client = self._data_client()
+        fetchers = {
+            "activities": real_garmin.fetch_activities,
+            "metrics": real_garmin.fetch_daily_health,
+            "sleep": real_garmin.fetch_sleep,
+        }
+        try:
+            return {key: fetchers[kind](client, from_, to)}
+        except Exception as err:  # noqa: BLE001
+            logger.warning("Garmin-%s-Abruf fehlgeschlagen: %s", kind, type(err).__name__)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Garmin-Datenabruf ({kind}) fehlgeschlagen.",
+            ) from None
 
     def activities(self, seed: str, from_: str, to: str) -> dict:
         self._ensure_ready()
-        return self._data_not_implemented()
+        return self._fetch("activities", "activities", from_, to)
 
     def daily_health(self, seed: str, from_: str, to: str) -> dict:
         self._ensure_ready()
-        return self._data_not_implemented()
+        return self._fetch("metrics", "metrics", from_, to)
 
     def sleep(self, seed: str, from_: str, to: str) -> dict:
         self._ensure_ready()
-        return self._data_not_implemented()
+        return self._fetch("sleep", "sleep", from_, to)
 
 
 def is_stub_mode() -> bool:

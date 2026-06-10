@@ -20,7 +20,7 @@ export interface ListQuery {
 }
 
 export interface GarminAuthStartResult {
-  mode: 'stub';
+  mode: 'stub' | 'real';
   mfaRequired: boolean;
   challengeId: string;
   expiresAt: string;
