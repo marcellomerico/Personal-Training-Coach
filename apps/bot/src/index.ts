@@ -60,6 +60,10 @@ interface BotSyncResponse {
     dailyHealth: number;
     sleep: number;
   };
+  syncJob: {
+    id: string;
+    status: string;
+  };
 }
 
 interface ReplyContext {
@@ -279,6 +283,7 @@ async function main() {
       await ctx.reply(
         [
           "Garmin-Sync abgeschlossen.",
+          `Job: ${data.syncJob.id} (${data.syncJob.status})`,
           `Aktivitaeten: ${data.stats.activities}`,
           `Gesundheitstage: ${data.stats.dailyHealth}`,
           `Schlafnaechte: ${data.stats.sleep}`,

@@ -6,8 +6,8 @@ import {
   SecretEncryptionError,
 } from '@ptc/config';
 import { GarminConnector } from '@ptc/connectors';
-import { runGarminSync, type SyncStats } from '@ptc/ingest';
-import { Prisma } from '@ptc/db';
+import { runTrackedGarminSync, type SyncStats } from '@ptc/ingest';
+import { Prisma, type SyncJob } from '@ptc/db';
 import { PrismaService } from '../prisma/prisma.service';
 
 const GARMIN_PROVIDER = 'garmin_unofficial' as const;
@@ -31,6 +31,25 @@ export interface GarminAuthCompleteResult {
   status: string;
   externalUserId: string | null;
   authMode: string;
+}
+
+export interface SyncJobSummary {
+  id: string;
+  status: string;
+  type: string;
+  rangeFrom: Date | null;
+  rangeTo: Date | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  error: string | null;
+  stats: Prisma.JsonValue | null;
+  attempt: number;
+  createdAt: Date;
+}
+
+export interface GarminSyncResult {
+  stats: SyncStats;
+  syncJob: SyncJobSummary;
 }
 
 @Injectable()
@@ -97,7 +116,7 @@ export class GarminService {
   }
 
   /** Startet einen synchronen Sync (Stub) und liefert die Import-Statistik. */
-  async sync(userId: string, since: Date | null): Promise<SyncStats> {
+  async sync(userId: string, since: Date | null): Promise<GarminSyncResult> {
     const account = await this.prisma.providerAccount.findUnique({
       where: { userId_provider: { userId, provider: GARMIN_PROVIDER } },
     });
@@ -107,7 +126,7 @@ export class GarminService {
       );
     }
 
-    return runGarminSync(
+    const result = await runTrackedGarminSync(
       this.prisma,
       this.connector(),
       {
@@ -118,6 +137,19 @@ export class GarminService {
       },
       this.logger,
     );
+    return { stats: result.stats, syncJob: this.toSyncJobSummary(result.syncJob) };
+  }
+
+  async latestSyncJobs(userId: string, limit = 5): Promise<SyncJobSummary[]> {
+    const jobs = await this.prisma.syncJob.findMany({
+      where: {
+        userId,
+        providerAccount: { is: { provider: GARMIN_PROVIDER } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 20),
+    });
+    return jobs.map((job) => this.toSyncJobSummary(job));
   }
 
   async listActivities(userId: string, query: ListQuery) {
@@ -178,5 +210,21 @@ export class GarminService {
       }
       throw err;
     }
+  }
+
+  private toSyncJobSummary(job: SyncJob): SyncJobSummary {
+    return {
+      id: job.id,
+      status: job.status,
+      type: job.type,
+      rangeFrom: job.rangeFrom,
+      rangeTo: job.rangeTo,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      error: job.error,
+      stats: job.stats,
+      attempt: job.attempt,
+      createdAt: job.createdAt,
+    };
   }
 }

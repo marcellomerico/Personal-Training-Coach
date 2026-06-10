@@ -70,6 +70,10 @@ Import-Flow (nach Login): `POST /providers/garmin/auth/start` →
 `GET /sleep`. Der alte Dev-Endpunkt `POST /providers/garmin/connect` bleibt als
 Stub-Abkürzung vorhanden.
 
+Jeder Garmin-Sync schreibt einen Eintrag in `sync_jobs` (`running`/`success`/
+`failed`, Fehlertext, Statistik). Die letzten Jobs sind über
+`GET /sync/garmin/jobs` sichtbar und werden im Dashboard angezeigt.
+
 ## Provider-Secrets
 
 Tokens und Sessiondaten von externen Anbietern dürfen nicht im Klartext gespeichert

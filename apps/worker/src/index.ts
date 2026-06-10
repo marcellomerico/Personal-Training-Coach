@@ -2,7 +2,7 @@ import PgBoss from "pg-boss";
 import { createLogger, loadEnv } from "@ptc/config";
 import { GarminConnector } from "@ptc/connectors";
 import { prisma } from "@ptc/db";
-import { runGarminSync } from "@ptc/ingest";
+import { runTrackedGarminSync } from "@ptc/ingest";
 
 /**
  * Background-Worker/Scheduler (pg-boss, nutzt Postgres als Queue).
@@ -19,6 +19,7 @@ export interface GarminSyncJobData {
   providerAccountId: string;
   externalUserId: string | null;
   since?: string | null;
+  syncJobId?: string | null;
 }
 
 async function main() {
@@ -30,12 +31,12 @@ async function main() {
 
   await boss.work<GarminSyncJobData>(GARMIN_SYNC_QUEUE, async (jobs) => {
     for (const job of jobs) {
-      const { userId, providerAccountId, externalUserId, since } = job.data;
+      const { userId, providerAccountId, externalUserId, since, syncJobId } = job.data;
       const connector = new GarminConnector(
         { baseUrl: env.GARMIN_CONNECTOR_URL, apiKey: env.INTERNAL_API_KEY },
         "garmin_unofficial",
       );
-      const stats = await runGarminSync(
+      const result = await runTrackedGarminSync(
         prisma,
         connector,
         {
@@ -43,10 +44,14 @@ async function main() {
           providerAccountId,
           externalUserId,
           since: since ? new Date(since) : null,
+          syncJobId,
         },
         log,
       );
-      log.info({ jobId: job.id, ...stats }, "garmin-sync Job verarbeitet");
+      log.info(
+        { jobId: job.id, syncJobId: result.syncJob.id, ...result.stats },
+        "garmin-sync Job verarbeitet",
+      );
     }
   });
 

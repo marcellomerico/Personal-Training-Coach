@@ -43,8 +43,13 @@ export class GarminController {
     @Body() body: { since?: string } | undefined,
   ) {
     const since = body?.since ? new Date(body.since) : null;
-    const stats = await this.garmin.sync(user.id, since);
-    return { ok: true, stats };
+    const result = await this.garmin.sync(user.id, since);
+    return { ok: true, ...result };
+  }
+
+  @Get('sync/garmin/jobs')
+  syncJobs(@CurrentUser() user: SafeUser, @Query('limit') limit?: string) {
+    return this.garmin.latestSyncJobs(user.id, limit ? Number(limit) : undefined);
   }
 
   @Get('activities')

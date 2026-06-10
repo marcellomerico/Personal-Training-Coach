@@ -1,6 +1,6 @@
 import type { Logger } from '@ptc/config';
 import type { ProviderAccount, SourceConnector, SyncResult } from '@ptc/core';
-import { type PrismaClient, type Provider } from '@ptc/db';
+import { Prisma, type PrismaClient, type Provider, type SyncJob } from '@ptc/db';
 import { computeAndStoreReadiness } from './readiness';
 
 export { computeAndStoreReadiness } from './readiness';
@@ -20,12 +20,21 @@ export interface SyncStats {
   sleep: number;
 }
 
+export interface TrackedSyncResult {
+  stats: SyncStats;
+  syncJob: SyncJob;
+}
+
 function dateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
 function rawKey(entityType: string, sourceExternalId: string): string {
   return `${entityType}:${sourceExternalId}`;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -204,4 +213,65 @@ export async function runGarminSync(
   };
   logger?.info({ userId: ctx.userId, ...stats }, 'Garmin-Sync abgeschlossen');
   return stats;
+}
+
+/**
+ * Fuehrt denselben Garmin-Sync aus, protokolliert aber den Lifecycle in `sync_jobs`.
+ * Wird fuer manuelle API/Bot-Syncs und Worker-Jobs genutzt.
+ */
+export async function runTrackedGarminSync(
+  prisma: PrismaClient,
+  connector: SourceConnector,
+  ctx: SyncContext & { syncJobId?: string | null },
+  logger?: Logger,
+): Promise<TrackedSyncResult> {
+  const now = new Date();
+  const syncJob = ctx.syncJobId
+    ? await prisma.syncJob.update({
+        where: { id: ctx.syncJobId },
+        data: {
+          status: 'running',
+          startedAt: now,
+          finishedAt: null,
+          error: null,
+          attempt: { increment: 1 },
+        },
+      })
+    : await prisma.syncJob.create({
+        data: {
+          userId: ctx.userId,
+          providerAccountId: ctx.providerAccountId,
+          type: 'incremental',
+          status: 'running',
+          rangeFrom: ctx.since,
+          rangeTo: now,
+          startedAt: now,
+          attempt: 1,
+        },
+      });
+
+  try {
+    const stats = await runGarminSync(prisma, connector, ctx, logger);
+    const updated = await prisma.syncJob.update({
+      where: { id: syncJob.id },
+      data: {
+        status: 'success',
+        finishedAt: new Date(),
+        error: null,
+        stats: stats as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return { stats, syncJob: updated };
+  } catch (err) {
+    const updated = await prisma.syncJob.update({
+      where: { id: syncJob.id },
+      data: {
+        status: 'failed',
+        finishedAt: new Date(),
+        error: errorMessage(err),
+      },
+    });
+    logger?.error({ err, syncJobId: updated.id, userId: ctx.userId }, 'Garmin-Sync fehlgeschlagen');
+    throw err;
+  }
 }
