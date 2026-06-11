@@ -29,6 +29,13 @@ export interface GarminConnectorOptions {
   apiKey?: string;
   /** Standard-Rückblick in Tagen, wenn kein `since` übergeben wird. */
   defaultLookbackDays?: number;
+  /**
+   * Entschlüsselte Provider-Session (aus `provider_accounts.secrets`).
+   * Wird bei Datenabrufen als `x-garmin-session`-Header an den Python-Connector
+   * gesendet, damit der echte Datenabruf zustandslos und prozessunabhängig
+   * funktioniert. Im Stub-Modus ignoriert der Connector den Header.
+   */
+  session?: Record<string, unknown>;
 }
 
 export interface GarminAuthStartInput {
@@ -73,12 +80,14 @@ export class GarminConnector implements SourceConnector {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly defaultLookbackDays: number;
+  private readonly session?: Record<string, unknown>;
 
   constructor(opts: GarminConnectorOptions, provider: Provider = 'garmin_unofficial') {
     this.provider = provider;
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.apiKey = opts.apiKey;
     this.defaultLookbackDays = opts.defaultLookbackDays ?? 30;
+    this.session = opts.session;
   }
 
   async fetchSince(account: ProviderAccount, since: Date | null): Promise<SyncResult> {
@@ -196,6 +205,8 @@ export class GarminConnector implements SourceConnector {
 
     const headers: Record<string, string> = { accept: 'application/json' };
     if (this.apiKey) headers['x-internal-key'] = this.apiKey;
+    // Session nur bei Datenabrufen (get) mitsenden; Stub ignoriert sie.
+    if (this.session) headers['x-garmin-session'] = JSON.stringify(this.session);
 
     const res = await fetch(url, { headers });
     if (!res.ok) {

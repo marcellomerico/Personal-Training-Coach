@@ -16,10 +16,13 @@ Die Endpunkte delegieren an einen Provider (`app/provider.py`), gesteuert über
   `garth` (inkl. MFA). Kontrollierte Fehler, wenn Voraussetzungen fehlen:
   - **503**, wenn `garth`/`garminconnect` nicht installiert sind.
   - **503**, wenn `GARMIN_EMAIL`/`GARMIN_PASSWORD` nicht gesetzt sind.
-  - **502**, wenn der Login/MFA-Abschluss bei Garmin fehlschlägt.
-  - **501** bei `GET /activities|daily-health|sleep` – der echte Datenabruf
-    folgt in `feat/garmin-real-data-mapping`. Der Login (start/complete) ist
-    bereits aktiv.
+  - **502**, wenn der Login/MFA-Abschluss oder ein Datenabruf bei Garmin
+    fehlschlägt.
+
+Der Datenabruf (`/activities`, `/daily-health`, `/sleep`) ist im Real-Modus
+implementiert (`app/real_garmin.py`): er nutzt die garth-Session über
+`garminconnect` und mappt die Garmin-Antworten auf dieselben Schemas wie der
+Stub.
 
 ## Stub-Endpunkte
 - `POST /auth/start` startet eine MFA-Challenge. Im Stub-Modus lautet der Code `000000`.
@@ -52,8 +55,10 @@ Der Login ist implementiert. Manuelle Schritte zum lokalen Testen:
    zurückgegeben und dort verschlüsselt in `provider_accounts.secrets`
    gespeichert. Das **Passwort wird nicht gespeichert und nicht geloggt**.
 
-> Der echte Datenabruf (`/activities`, `/daily-health`, `/sleep`) folgt in
-> `feat/garmin-real-data-mapping`; bis dahin antworten diese im Real-Modus mit 501.
+> Hinweis: Die genauen Garmin-Connect-Feldnamen können je nach API-Stand
+> abweichen. Das Mapping in `app/real_garmin.py` ist defensiv (fehlende Felder
+> -> null, fehlerhafte Einzeleinträge werden übersprungen); beim ersten echten
+> Sync bitte die gemappten Werte gegenprüfen.
 
 ## Geplant
 - Echter einmaliger interaktiver Login inkl. **MFA** (E6), danach Token-basiert (`garth`).

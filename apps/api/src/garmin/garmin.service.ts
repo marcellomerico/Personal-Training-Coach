@@ -1,13 +1,18 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   createLogger,
+  decryptJsonSecret,
   encryptJsonSecret,
   loadEnv,
   SecretEncryptionError,
 } from '@ptc/config';
 import { GarminConnector } from '@ptc/connectors';
 import { runTrackedGarminSync, type SyncStats } from '@ptc/ingest';
-import { Prisma, type SyncJob } from '@ptc/db';
+import { Prisma, type ProviderAccount, type SyncJob } from '@ptc/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 
@@ -20,7 +25,7 @@ export interface ListQuery {
 }
 
 export interface GarminAuthStartResult {
-  mode: 'stub';
+  mode: 'stub' | 'real';
   mfaRequired: boolean;
   challengeId: string;
   expiresAt: string;
@@ -83,20 +88,23 @@ export class GarminService {
   ): Promise<GarminAuthCompleteResult> {
     const auth = await this.connector().completeAuth(body);
     const encryptedSecrets = this.encryptProviderSecrets(auth.secrets);
+    // Modus aus der Connector-Antwort übernehmen (stub | real), statt hart zu
+    // kodieren – so spiegelt authMode den tatsächlichen Connector-Modus wider.
+    const authMode = `unofficial_${auth.mode ?? 'stub'}`;
 
     const account = await this.prisma.providerAccount.upsert({
       where: { userId_provider: { userId, provider: GARMIN_PROVIDER } },
       create: {
         userId,
         provider: GARMIN_PROVIDER,
-        authMode: 'unofficial_stub',
+        authMode,
         externalUserId: auth.externalUserId,
         status: 'connected',
         secrets: encryptedSecrets,
         connectedAt: new Date(auth.connectedAt),
       },
       update: {
-        authMode: 'unofficial_stub',
+        authMode,
         externalUserId: auth.externalUserId,
         status: 'connected',
         secrets: encryptedSecrets,
@@ -108,7 +116,7 @@ export class GarminService {
       providerAccountId: account.id,
       status: account.status,
       externalUserId: account.externalUserId,
-      authMode: account.authMode ?? 'unofficial_stub',
+      authMode: account.authMode ?? authMode,
     };
   }
 
@@ -172,7 +180,7 @@ export class GarminService {
 
     const result = await runTrackedGarminSync(
       this.prisma,
-      this.connector(),
+      this.connector(this.decryptSession(account)),
       {
         userId,
         providerAccountId: account.id,
@@ -211,13 +219,30 @@ export class GarminService {
       },
     });
 
-    await this.queue.enqueueGarminSync({
-      userId,
-      providerAccountId: account.id,
-      externalUserId: account.externalUserId,
-      since: since ? since.toISOString() : null,
-      syncJobId: job.id,
-    });
+    try {
+      await this.queue.enqueueGarminSync({
+        userId,
+        providerAccountId: account.id,
+        externalUserId: account.externalUserId,
+        since: since ? since.toISOString() : null,
+        syncJobId: job.id,
+      });
+    } catch (err) {
+      // Senden fehlgeschlagen -> Job nicht dauerhaft als `queued` verwaisen lassen.
+      const failed = await this.prisma.syncJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          error: 'Job konnte nicht an die Queue gesendet werden.',
+        },
+      });
+      this.logger.error({ err, syncJobId: job.id, userId }, 'Enqueue fehlgeschlagen');
+      throw new ServiceUnavailableException({
+        message: 'Garmin-Sync konnte nicht eingereiht werden.',
+        syncJob: this.toSyncJobSummary(failed),
+      });
+    }
 
     this.logger.info({ syncJobId: job.id, userId }, 'Garmin-Sync eingereiht');
     return this.toSyncJobSummary(job);
@@ -275,11 +300,33 @@ export class GarminService {
     return filter;
   }
 
-  private connector(): GarminConnector {
+  private connector(session?: Record<string, unknown>): GarminConnector {
     return new GarminConnector(
-      { baseUrl: this.env.GARMIN_CONNECTOR_URL, apiKey: this.env.INTERNAL_API_KEY },
+      {
+        baseUrl: this.env.GARMIN_CONNECTOR_URL,
+        apiKey: this.env.INTERNAL_API_KEY,
+        session,
+      },
       GARMIN_PROVIDER,
     );
+  }
+
+  /**
+   * Entschlüsselt die in `provider_accounts.secrets` abgelegte Session, damit
+   * der Connector sie beim echten Datenabruf an den Python-Service weiterreicht.
+   * Bei fehlenden/ungültigen Secrets wird ohne Session gesynct (Stub-Pfad).
+   */
+  private decryptSession(account: ProviderAccount): Record<string, unknown> | undefined {
+    if (!account.secrets) return undefined;
+    try {
+      return decryptJsonSecret<Record<string, unknown>>(account.secrets);
+    } catch (err) {
+      this.logger.warn(
+        { providerAccountId: account.id },
+        'Garmin-Session konnte nicht entschlüsselt werden; Sync ohne Session.',
+      );
+      return undefined;
+    }
   }
 
   private encryptProviderSecrets(secrets: unknown): string {

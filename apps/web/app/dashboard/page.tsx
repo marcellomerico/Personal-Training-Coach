@@ -332,7 +332,11 @@ export default function DashboardPage() {
             </div>
           )}
           <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>
-            Stub-Modus: Auth starten → MFA bestätigen (Stub-Code <code>000000</code>) → Sync.
+            {!garminStatus?.authMode || garminStatus.authMode.includes('stub') ? (
+              <>Stub-Modus: Auth starten → MFA bestätigen (Stub-Code <code>000000</code>) → Sync.</>
+            ) : (
+              <>Real-Modus: Auth starten → MFA-Code von Garmin bestätigen → Sync.</>
+            )}
           </p>
           <div className="row">
             <button onClick={onConnect} disabled={connecting}>
