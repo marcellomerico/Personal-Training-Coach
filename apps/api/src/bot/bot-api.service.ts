@@ -1,12 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  buildCoachRecommendation,
-  decisionText,
-  summarizeReadiness,
-  type ReadinessDecision,
-} from '@ptc/analysis';
+import { decisionText, summarizeReadiness, type ReadinessDecision } from '@ptc/analysis';
 import { PrismaService } from '../prisma/prisma.service';
 import { GarminService } from '../garmin/garmin.service';
+import { CoachService } from '../coach/coach.service';
 
 export interface BotReadinessSummary {
   score: number;
@@ -19,6 +15,7 @@ export interface BotRecommendation {
   headline: string;
   guidance: string[];
   reasons: string[];
+  explanationText: string | null;
 }
 
 export interface BotUserRef {
@@ -62,6 +59,7 @@ export class BotApiService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly garmin: GarminService,
+    private readonly coach: CoachService,
   ) {}
 
   async today(telegramUserIdRaw: string): Promise<BotTodayResponse> {
@@ -84,6 +82,9 @@ export class BotApiService {
         orderBy: { date: 'desc' },
       }),
     ]);
+
+    // Empfehlung inkl. optionaler LLM-Erklärung (DRY über CoachService).
+    const rec = await this.coach.fromReadiness(readiness);
 
     return {
       user,
@@ -124,16 +125,13 @@ export class BotApiService {
             summary: summarizeReadiness(readiness.rationale),
           }
         : null,
-      recommendation: readiness
-        ? (() => {
-            const rec = buildCoachRecommendation({
-              date: new Date(readiness.date).toISOString().slice(0, 10),
-              readinessScore: readiness.readinessScore,
-              decision: readiness.decision as ReadinessDecision,
-              rationale: readiness.rationale,
-            });
-            return { headline: rec.headline, guidance: rec.guidance, reasons: rec.reasons };
-          })()
+      recommendation: rec
+        ? {
+            headline: rec.headline,
+            guidance: rec.guidance,
+            reasons: rec.reasons,
+            explanationText: rec.explanationText,
+          }
         : null,
     };
   }

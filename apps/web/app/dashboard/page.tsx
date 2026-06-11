@@ -710,6 +710,11 @@ function CoachCard({ recommendation }: { recommendation: CoachRecommendation | n
           </li>
         ))}
       </ul>
+      {recommendation.explanationText && (
+        <p style={{ fontSize: 14, fontStyle: 'italic', margin: '0 0 10px' }}>
+          {recommendation.explanationText}
+        </p>
+      )}
       <p className="muted" style={{ fontSize: 13, margin: 0 }}>
         Grund: {recommendation.reasons.join(' ')}
       </p>

@@ -74,6 +74,8 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  // Modell für die Erklärungsschicht. Default: aktuelles Opus.
+  LLM_MODEL: z.string().default("claude-opus-4-8"),
 
   // Connectors
   STRAVA_CLIENT_ID: z.string().optional(),

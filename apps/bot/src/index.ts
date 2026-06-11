@@ -42,6 +42,7 @@ interface BotTodayResponse {
     headline: string;
     guidance: string[];
     reasons: string[];
+    explanationText: string | null;
   } | null;
 }
 
@@ -186,6 +187,9 @@ function formatToday(data: BotTodayResponse): string {
     ? [
         data.recommendation.headline,
         ...data.recommendation.guidance.map((g) => `- ${g}`),
+        ...(data.recommendation.explanationText
+          ? ["", data.recommendation.explanationText]
+          : []),
       ].join("\n")
     : "Noch keine Empfehlung - /sync starten.";
 
