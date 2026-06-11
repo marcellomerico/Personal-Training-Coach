@@ -8,6 +8,7 @@ import {
   createTelegramLinkToken,
   enqueueGarminSync,
   getActivities,
+  getCoachRecommendation,
   getDailyHealth,
   getGarminStatus,
   getGarminSyncJobs,
@@ -30,6 +31,7 @@ import {
 } from '@/lib/format';
 import type {
   Activity,
+  CoachRecommendation,
   DailyHealthMetric,
   GarminConnectionStatus,
   ReadinessDecision,
@@ -51,6 +53,7 @@ export default function DashboardPage() {
   const [sleep, setSleep] = useState<SleepRecord[]>([]);
   const [readiness, setReadiness] = useState<ReadinessMetric | null>(null);
   const [readinessHistory, setReadinessHistory] = useState<ReadinessMetric[]>([]);
+  const [recommendation, setRecommendation] = useState<CoachRecommendation | null>(null);
   const [syncJobs, setSyncJobs] = useState<SyncJobSummary[]>([]);
   const [garminStatus, setGarminStatus] = useState<GarminConnectionStatus | null>(null);
 
@@ -67,7 +70,7 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [a, h, s, r, history, jobs, garmin] = await Promise.all([
+    const [a, h, s, r, history, jobs, garmin, rec] = await Promise.all([
       getActivities(10),
       getDailyHealth(7),
       getSleep(7),
@@ -75,6 +78,7 @@ export default function DashboardPage() {
       getReadinessHistory(14),
       getGarminSyncJobs(5),
       getGarminStatus(),
+      getCoachRecommendation(),
     ]);
     setActivities(a);
     setHealth(h);
@@ -83,6 +87,7 @@ export default function DashboardPage() {
     setReadinessHistory(history);
     setSyncJobs(jobs);
     setGarminStatus(garmin);
+    setRecommendation(rec);
   }, []);
 
   // Auth-Gate + Initialdaten.
@@ -378,6 +383,9 @@ export default function DashboardPage() {
 
         <SyncJobsCard jobs={syncJobs} />
 
+        {/* Coach-Empfehlung (deterministisch) */}
+        <CoachCard recommendation={recommendation} />
+
         {/* Readiness / Tagesbewertung */}
         <ReadinessCard readiness={readiness} />
         <ReadinessHistoryCard history={readinessHistory} />
@@ -662,6 +670,52 @@ const DECISION_COLOR: Record<ReadinessDecision, string> = {
   normal: '#16a34a',
   hard: '#2563eb',
 };
+
+function CoachCard({ recommendation }: { recommendation: CoachRecommendation | null }) {
+  if (!recommendation) {
+    return (
+      <div className="card">
+        <div className="card-title">Empfehlung</div>
+        <p className="muted">Noch keine Empfehlung – Sync starten.</p>
+      </div>
+    );
+  }
+
+  const color = DECISION_COLOR[recommendation.decision];
+  return (
+    <div className="card">
+      <div className="card-title">Empfehlung · {fmtDate(recommendation.date)}</div>
+      <div className="row" style={{ alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <span
+          style={{
+            padding: '4px 12px',
+            borderRadius: 999,
+            background: color,
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          {DECISION_LABEL[recommendation.decision]}
+        </span>
+        <strong style={{ fontSize: 16 }}>{recommendation.headline}</strong>
+        <span className="muted" style={{ fontSize: 13 }}>
+          Readiness {recommendation.readinessScore}/100
+        </span>
+      </div>
+      <ul style={{ margin: '0 0 10px', paddingLeft: 20 }}>
+        {recommendation.guidance.map((g) => (
+          <li key={g} style={{ marginBottom: 2 }}>
+            {g}
+          </li>
+        ))}
+      </ul>
+      <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+        Grund: {recommendation.reasons.join(' ')}
+      </p>
+    </div>
+  );
+}
 
 /** Kurze Begründung: die stärksten negativen Beiträge aus der rationale. */
 function readinessSummary(readiness: ReadinessMetric): string {
