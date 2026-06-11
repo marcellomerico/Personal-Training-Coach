@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { decisionText, summarizeReadiness, type ReadinessDecision } from '@ptc/analysis';
+import {
+  buildCoachRecommendation,
+  decisionText,
+  summarizeReadiness,
+  type ReadinessDecision,
+} from '@ptc/analysis';
 import { PrismaService } from '../prisma/prisma.service';
 import { GarminService } from '../garmin/garmin.service';
 
@@ -8,6 +13,12 @@ export interface BotReadinessSummary {
   decision: string;
   decisionText: string;
   summary: string;
+}
+
+export interface BotRecommendation {
+  headline: string;
+  guidance: string[];
+  reasons: string[];
 }
 
 export interface BotUserRef {
@@ -34,6 +45,7 @@ export interface BotTodayResponse {
   } | null;
   latestActivity: BotActivitySummary | null;
   readiness: BotReadinessSummary | null;
+  recommendation: BotRecommendation | null;
 }
 
 export interface BotActivitySummary {
@@ -111,6 +123,17 @@ export class BotApiService {
             decisionText: decisionText(readiness.decision as ReadinessDecision),
             summary: summarizeReadiness(readiness.rationale),
           }
+        : null,
+      recommendation: readiness
+        ? (() => {
+            const rec = buildCoachRecommendation({
+              date: new Date(readiness.date).toISOString().slice(0, 10),
+              readinessScore: readiness.readinessScore,
+              decision: readiness.decision as ReadinessDecision,
+              rationale: readiness.rationale,
+            });
+            return { headline: rec.headline, guidance: rec.guidance, reasons: rec.reasons };
+          })()
         : null,
     };
   }

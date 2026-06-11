@@ -372,3 +372,116 @@ export function summarizeReadiness(rationale: unknown): string {
   if (negatives.length === 0) return 'Alle Werte im grünen Bereich.';
   return negatives.join(' ');
 }
+
+// --- Coach-Empfehlung (v0, regelbasiert, kein LLM) --------------------------
+
+export const COACH_ENGINE_VERSION = 'coach-v0.1.0';
+
+/** Eingabe für die Empfehlung: die (gespeicherte) Readiness-Bewertung. */
+export interface CoachReadinessInput {
+  date: string;
+  readinessScore: number;
+  decision: ReadinessDecision;
+  /** Strukturierte Readiness-Begründung (JSON aus der DB), tolerant gelesen. */
+  rationale: unknown;
+}
+
+/**
+ * Konkrete, deterministische Tagesempfehlung. Die `decision` ist die Source of
+ * Truth (regelbasiert); `explanationText` bleibt null und wird erst vom LLM
+ * (Claude, optional, späterer Schritt) befüllt.
+ */
+export interface CoachRecommendation {
+  date: string;
+  decision: ReadinessDecision;
+  readinessScore: number;
+  /** Kurz-Überschrift, z. B. "Ruhetag empfohlen". */
+  headline: string;
+  /** Konkrete, umsetzbare Hinweise für den Tag. */
+  guidance: string[];
+  /** Kurze Begründung (stärkste negative Beiträge bzw. "alles grün"). */
+  reasons: string[];
+  /** Optionaler LLM-Klartext; null solange LLM deaktiviert ist. */
+  explanationText: string | null;
+  engineVersion: string;
+}
+
+const COACH_GUIDANCE: Record<ReadinessDecision, string[]> = {
+  rest: [
+    'Heute Ruhetag oder sehr leichte Bewegung (Spaziergang, Mobility).',
+    'Fokus auf Schlaf, Ernährung und Stressabbau.',
+    'Kein intensives Training.',
+  ],
+  easy: [
+    'Lockeres Training in niedriger Intensität (Zone 1–2).',
+    'Dauer kurz bis moderat halten.',
+    'Auf Körpergefühl achten; bei Bedarf abbrechen.',
+  ],
+  normal: [
+    'Normales Training möglich (Zone 2–3).',
+    'Geplante Einheit umsetzen, nichts erzwingen.',
+    'Auf- und Abwärmen nicht überspringen.',
+  ],
+  hard: [
+    'Bereit für eine harte Einheit (Intervalle, Tempo, langer Lauf).',
+    'Gründlich aufwärmen, danach Cooldown.',
+    'Ausreichende Erholung danach einplanen.',
+  ],
+};
+
+const RULE_TIP: Record<ReadinessRuleContribution['rule'], string> = {
+  sleep: 'Schlaf war schwach – heute früher ins Bett.',
+  hrv: 'HRV unter Baseline – Belastung bewusst dosieren.',
+  rhr: 'Ruhepuls erhöht – auf Müdigkeit/Infekt-Anzeichen achten.',
+  load: 'Gestern hart trainiert – Regeneration zulassen.',
+};
+
+/** Liest die Regel-Beiträge tolerant aus der (DB-)rationale. */
+function readRules(rationale: unknown): ReadinessRuleContribution[] {
+  if (!rationale || typeof rationale !== 'object' || !('rules' in rationale)) return [];
+  const rules = (rationale as { rules?: unknown }).rules;
+  if (!Array.isArray(rules)) return [];
+  return rules.filter(
+    (r): r is ReadinessRuleContribution =>
+      !!r && typeof r === 'object' && typeof (r as { delta?: unknown }).delta === 'number',
+  );
+}
+
+/** Kurze Begründungen (stärkste negative Beiträge zuerst) als Liste. */
+export function readinessReasons(rationale: unknown): string[] {
+  const negatives = readRules(rationale)
+    .filter((r) => r.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 2)
+    .map((r) => r.label);
+  return negatives.length > 0 ? negatives : ['Alle Werte im grünen Bereich.'];
+}
+
+/**
+ * Baut die deterministische Tagesempfehlung aus der Readiness-Bewertung.
+ * Reine Regeln/Mapping – kein LLM. Die Guidance richtet sich nach der
+ * Entscheidung; zusätzlich wird ein gezielter Tipp aus dem stärksten negativen
+ * Regel-Beitrag ergänzt.
+ */
+export function buildCoachRecommendation(input: CoachReadinessInput): CoachRecommendation {
+  const guidance = [...COACH_GUIDANCE[input.decision]];
+
+  const worst = readRules(input.rationale)
+    .filter((r) => r.delta < 0)
+    .sort((a, b) => a.delta - b.delta)[0];
+  if (worst) {
+    const tip = RULE_TIP[worst.rule];
+    if (tip && !guidance.includes(tip)) guidance.push(tip);
+  }
+
+  return {
+    date: input.date,
+    decision: input.decision,
+    readinessScore: input.readinessScore,
+    headline: decisionText(input.decision),
+    guidance,
+    reasons: readinessReasons(input.rationale),
+    explanationText: null,
+    engineVersion: COACH_ENGINE_VERSION,
+  };
+}

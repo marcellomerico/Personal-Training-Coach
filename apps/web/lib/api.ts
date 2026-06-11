@@ -6,6 +6,7 @@ import type {
   HealthStatus,
   ReadinessMetric,
   SafeUser,
+  CoachRecommendation,
   GarminConnectionStatus,
   SleepRecord,
   SyncJobSummary,
@@ -163,4 +164,11 @@ export function getLatestReadiness(): Promise<ReadinessMetric | null> {
 /** Letzte Tagesbewertungen, neueste zuerst. */
 export function getReadinessHistory(limit = 14): Promise<ReadinessMetric[]> {
   return request(`/readiness/history?limit=${limit}`);
+}
+
+// --- Coach -----------------------------------------------------------------
+
+/** Konkrete Tagesempfehlung (oder null, wenn noch keine Readiness vorliegt). */
+export function getCoachRecommendation(): Promise<CoachRecommendation | null> {
+  return request('/coach/recommendation');
 }

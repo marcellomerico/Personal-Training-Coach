@@ -38,6 +38,11 @@ interface BotTodayResponse {
     decisionText: string;
     summary: string;
   } | null;
+  recommendation: {
+    headline: string;
+    guidance: string[];
+    reasons: string[];
+  } | null;
 }
 
 interface BotActivitySummary {
@@ -177,8 +182,18 @@ function formatToday(data: BotTodayResponse): string {
       ].join("\n")
     : "Noch keine Bewertung berechnet - /sync starten.";
 
+  const recommendation = data.recommendation
+    ? [
+        data.recommendation.headline,
+        ...data.recommendation.guidance.map((g) => `- ${g}`),
+      ].join("\n")
+    : "Noch keine Empfehlung - /sync starten.";
+
   return [
     `Tagesstatus fuer ${name}`,
+    "",
+    "Empfehlung",
+    recommendation,
     "",
     "Readiness",
     readiness,

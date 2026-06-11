@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildCoachRecommendation,
+  COACH_ENGINE_VERSION,
   computeReadiness,
   decideFromScore,
   decisionText,
+  readinessReasons,
   summarizeReadiness,
   type ReadinessInput,
 } from './index';
@@ -137,5 +140,55 @@ describe('decision helpers', () => {
   it('handles missing rationale safely', () => {
     expect(summarizeReadiness(null)).toBe('Keine Begründung verfügbar.');
     expect(summarizeReadiness({ rules: [] })).toBe('Alle Werte im grünen Bereich.');
+  });
+});
+
+describe('buildCoachRecommendation', () => {
+  it('builds a deterministic recommendation from a recovered readiness', () => {
+    const readiness = computeReadiness(baseInput);
+    const rec = buildCoachRecommendation({
+      date: readiness.date,
+      readinessScore: readiness.readinessScore,
+      decision: readiness.decision,
+      rationale: readiness.rationale,
+    });
+
+    expect(rec.decision).toBe('hard');
+    expect(rec.headline).toBe('Bereit für harte Einheit');
+    expect(rec.guidance.length).toBeGreaterThanOrEqual(3);
+    expect(rec.reasons).toEqual(['Alle Werte im grünen Bereich.']);
+    expect(rec.explanationText).toBeNull();
+    expect(rec.engineVersion).toBe(COACH_ENGINE_VERSION);
+  });
+
+  it('adds a targeted tip from the strongest negative rule', () => {
+    const readiness = computeReadiness({
+      ...baseInput,
+      health: { date: '2026-06-09', restingHr: 65, hrv: 42 },
+      sleep: { date: '2026-06-09', sleepScore: 45, totalSleepSec: 4 * 3600 },
+    });
+    const rec = buildCoachRecommendation({
+      date: readiness.date,
+      readinessScore: readiness.readinessScore,
+      decision: readiness.decision,
+      rationale: readiness.rationale,
+    });
+
+    expect(rec.decision).toBe('rest');
+    // Schlaf ist der stärkste negative Beitrag -> gezielter Tipp ergänzt.
+    expect(rec.guidance).toContain('Schlaf war schwach – heute früher ins Bett.');
+    expect(rec.reasons[0]).toBe('Sehr schlechter Schlaf.');
+  });
+
+  it('returns empty-reason fallback and is tolerant to missing rationale', () => {
+    expect(readinessReasons(null)).toEqual(['Alle Werte im grünen Bereich.']);
+    const rec = buildCoachRecommendation({
+      date: '2026-06-09',
+      readinessScore: 70,
+      decision: 'normal',
+      rationale: null,
+    });
+    expect(rec.guidance.length).toBeGreaterThanOrEqual(3);
+    expect(rec.reasons).toEqual(['Alle Werte im grünen Bereich.']);
   });
 });

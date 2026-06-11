@@ -144,3 +144,16 @@ export interface ReadinessMetric {
   computedAt: string;
   engineVersion: string;
 }
+
+// Deterministische Coach-Empfehlung (GET /coach/recommendation).
+// explanationText bleibt null, bis das LLM (optional) aktiviert wird.
+export interface CoachRecommendation {
+  date: string;
+  decision: ReadinessDecision;
+  readinessScore: number;
+  headline: string;
+  guidance: string[];
+  reasons: string[];
+  explanationText: string | null;
+  engineVersion: string;
+}
