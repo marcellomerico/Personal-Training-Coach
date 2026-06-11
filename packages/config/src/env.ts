@@ -68,14 +68,23 @@ const envSchema = z.object({
   // Bot-Username (ohne @) für Deep-Links: https://t.me/<username>?start=<token>
   TELEGRAM_BOT_USERNAME: z.string().optional(),
 
-  // LLM (Claude) – optional/abschaltbar
-  ANTHROPIC_API_KEY: z.string().optional(),
+  // LLM (Erklärungsschicht) – optional/abschaltbar
   LLM_ENABLED: z
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
-  // Modell für die Erklärungsschicht. Default: aktuelles Opus.
+  // Anbieter der Erklärungsschicht.
+  LLM_PROVIDER: z.enum(["anthropic", "gemini"]).default("anthropic"),
+
+  // Anthropic (Claude) – kostenpflichtig.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  // Modell für den Anthropic-Pfad. Default: aktuelles Opus.
   LLM_MODEL: z.string().default("claude-opus-4-8"),
+
+  // Google Gemini – Free-Tier verfügbar (Cloud; Gesundheitsdaten verlassen das Gerät).
+  GEMINI_API_KEY: z.string().optional(),
+  // Modell für den Gemini-Pfad. Default: schnelles Free-Tier-Modell.
+  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
 
   // Connectors
   STRAVA_CLIENT_ID: z.string().optional(),
