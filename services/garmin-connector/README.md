@@ -1,9 +1,11 @@
 # garmin-connector (Python-Service)
 
-Isolierter Connector für die **primäre** Datenquelle Garmin (inoffiziell, `garth`/
+Isolierter Connector für die **primäre** Datenquelle Garmin (inoffiziell,
 `garminconnect`). Liefert normalisierte Daten an den TS-Kern (interne API/DB).
 
-> Status: **Stub.** Datenimport und Auth-Flow sind ohne echten Garmin-Login testbar.
+> Status: **Stub + Real-Login implementiert.** Der echte Datenabruf ist
+> strukturell vorbereitet, die Session-Wiederherstellung für `garminconnect`
+> im Datenpfad ist noch als TODO markiert.
 
 ## Provider-Modi (Stub vs. Real)
 
@@ -13,16 +15,17 @@ Die Endpunkte delegieren an einen Provider (`app/provider.py`), gesteuert über
 - `GARMIN_STUB_MODE=true` (Default) → **StubGarminProvider**: deterministische
   Testdaten, unverändert.
 - `GARMIN_STUB_MODE=false` → **RealGarminProvider**: echter Garmin-Login über
-  `garth` (inkl. MFA). Kontrollierte Fehler, wenn Voraussetzungen fehlen:
-  - **503**, wenn `garth`/`garminconnect` nicht installiert sind.
+  `garminconnect` (inkl. MFA). Kontrollierte Fehler, wenn Voraussetzungen fehlen:
+  - **503**, wenn `garminconnect` nicht installiert ist.
   - **503**, wenn `GARMIN_EMAIL`/`GARMIN_PASSWORD` nicht gesetzt sind.
-  - **502**, wenn der Login/MFA-Abschluss oder ein Datenabruf bei Garmin
+  - **502/429**, wenn der Login/MFA-Abschluss oder ein Datenabruf bei Garmin
     fehlschlägt.
 
 Der Datenabruf (`/activities`, `/daily-health`, `/sleep`) ist im Real-Modus
-implementiert (`app/real_garmin.py`): er nutzt die garth-Session über
-`garminconnect` und mappt die Garmin-Antworten auf dieselben Schemas wie der
-Stub.
+gemappt (`app/real_garmin.py`) und auf dieselben Schemas wie der Stub
+normalisiert. Die konkrete Session-Wiederherstellung für `garminconnect` ist
+noch TODO, deshalb liefern diese Endpunkte im Real-Modus aktuell kontrolliert
+`501`, bis der letzte Integrationsschritt abgeschlossen ist.
 
 ## Stub-Endpunkte
 - `POST /auth/start` startet eine MFA-Challenge. Im Stub-Modus lautet der Code `000000`.
@@ -30,13 +33,13 @@ Stub.
   `provider_accounts.secrets` speichert.
 - `GET /activities`, `GET /daily-health`, `GET /sleep` liefern deterministische Testdaten.
 
-## Echter Login (garth/garminconnect)
+## Echter Login (garminconnect)
 
 Der Login ist implementiert. Manuelle Schritte zum lokalen Testen:
 
 1. Pakete installieren (in der venv des Connectors):
    ```bash
-   services/garmin-connector/.venv/bin/pip install garth garminconnect
+   services/garmin-connector/.venv/bin/pip install garminconnect
    ```
    In `requirements.txt` sind sie als Kommentar vermerkt; bewusst optional, damit
    der Stub-Betrieb schlank bleibt.
@@ -47,11 +50,11 @@ Der Login ist implementiert. Manuelle Schritte zum lokalen Testen:
    ```
 3. Real-Modus aktivieren: `GARMIN_STUB_MODE=false`.
 4. Login-Flow (zweistufig, identisch zum Stub-HTTP-Interface):
-   - `POST /auth/start` → startet den garth-Login mit den Umgebungs-Zugangsdaten.
+   - `POST /auth/start` → startet den `garminconnect`-Login mit den Umgebungs-Zugangsdaten.
      Verlangt Garmin MFA, kommt `mfaRequired: true` + eine `challengeId` zurück.
    - `POST /auth/complete` mit `challengeId` + `mfaCode` (der von Garmin per
      App/SMS/E-Mail gesendete 2FA-Code) → schliesst den Login ab.
-5. Ergebnis: die `garth`-Session (Token-String) wird unter `secrets` an die API
+5. Ergebnis: die `garminconnect`-Session (Token-String) wird unter `secrets` an die API
    zurückgegeben und dort verschlüsselt in `provider_accounts.secrets`
    gespeichert. Das **Passwort wird nicht gespeichert und nicht geloggt**.
 
@@ -61,7 +64,8 @@ Der Login ist implementiert. Manuelle Schritte zum lokalen Testen:
 > Sync bitte die gemappten Werte gegenprüfen.
 
 ## Geplant
-- Echter einmaliger interaktiver Login inkl. **MFA** (E6), danach Token-basiert (`garth`).
+- Real-Datenabruf finalisieren: Session aus `secrets` für `garminconnect`
+  wiederherstellen (statt TODO-501).
 - Token-Refresh und robuste Fehlerzustände für abgelaufene Garmin-Sessions.
 - Läuft als eigener Container (siehe `docker-compose.yml`, folgt in Phase 2).
 
