@@ -8,10 +8,10 @@ Ernährungs-Empfehlungen – über einen **Telegram-Bot** (schnelle Interaktion)
 
 > Status: **Lokaler MVP mit Web-App, Telegram-Bot, Garmin-Stub-Sync,
 > Readiness und Coach-Empfehlung ist nutzbar.**
-> Der Garmin-Connector läuft standardmäßig im **Stub-Modus** und liefert
-> deterministische Testdaten. Echter Garmin-Login und echte Garmin-Daten sind
-> bewusst noch nicht produktiv aktiv, weil die aktuelle Garmin-Library-Anbindung
-> mit echtem Account verifiziert werden muss.
+> Der Garmin-Connector läuft standardmäßig im **Stub-Modus** (deterministische
+> Testdaten). **Echter Garmin-Login und Datenabruf sind implementiert**, müssen
+> aber noch mit einem echten Account lokal verifiziert werden, bevor sie
+> produktiv genutzt werden.
 
 ## Dokumentation (Planung)
 
@@ -24,6 +24,8 @@ Die vollständige Planung liegt in [`/docs`](./docs):
 - [`mvp-roadmap.md`](./docs/mvp-roadmap.md) – Phasen 0–7, MVP-Core & MVP-Extended
 - [`open-questions.md`](./docs/open-questions.md) – Entscheidungen, Risiken, offene Fragen
 - [`development-workflow.md`](./docs/development-workflow.md) – Branch-Regeln, Checks und Commit-Workflow
+- [`e2e-functional-checklist.md`](./docs/e2e-functional-checklist.md) – manuelle Funktions-Checkliste (lokal)
+- [`runtime-and-troubleshooting.md`](./docs/runtime-and-troubleshooting.md) – Betrieb, Health-Checks, typische Fehler
 
 ## Eckdaten
 
@@ -43,13 +45,13 @@ Die vollständige Planung liegt in [`/docs`](./docs):
 - Telegram-Bot mit `/help`, `/today`, `/last` und `/sync`, sobald der Telegram-Account
   über die Web-App verknüpft wurde.
 - Optionale LLM-Erklärung der Coach-Empfehlung via Anthropic oder Gemini.
+- Health-/Ops-Endpunkte (`/health`, `/health/ready`, `/health/ops`) und `pnpm ops:health`.
 
-## Noch Nicht Produktiv Nutzbar
+## Noch Nicht Produktiv Verifiziert
 
-- Echter Garmin-Login mit echten persönlichen Garmin-Daten. Die Architektur für
-  verschlüsselte Provider-Secrets und zustandslose Session-Übergabe ist vorbereitet,
-  aber die konkrete `garminconnect`-Anbindung muss mit echtem Account lokal
-  implementiert und getestet werden.
+- Echter Garmin-Betrieb mit persönlichen Daten: Login, Session-Restore und Sync
+  sind implementiert (`GARMIN_STUB_MODE=false`), aber noch nicht mit einem echten
+  Account im Dauerbetrieb getestet.
 - Strava-Integration, Workout-Writeback, Nutrition und Cycle Tracking sind noch
   geplante Erweiterungen.
 
@@ -95,6 +97,9 @@ Dev-Cache-Fehlern.
 
 Einzelstarts bleiben möglich: `pnpm dev:api`, `pnpm dev:worker`,
 `pnpm dev:bot`, `pnpm dev:web`.
+
+**Service-Check:** `pnpm ops:health` prüft API, Readiness und Garmin-Connector.
+Details: [`docs/runtime-and-troubleshooting.md`](./docs/runtime-and-troubleshooting.md).
 
 Import-Flow (nach Login): `POST /providers/garmin/auth/start` →
 `POST /providers/garmin/auth/complete` (Stub-MFA-Code `000000`) →
@@ -195,4 +200,4 @@ Package `@ptc/analysis` und die Provider-Secret-Verschlüsselung in `@ptc/config
 
 - Sensible Daten (Gesundheitsdaten, Tokens) werden verschlüsselt behandelt; niemals Secrets committen.
 - Der inoffizielle Garmin-Connector ist nur für eigene Accounts gedacht (siehe `docs/open-questions.md`).
-- Echte Garmin-Daten sind der nächste große technische Integrationsschritt.
+- Funktionale Stabilität vor UI-Polish: Checkliste in `docs/e2e-functional-checklist.md`.
