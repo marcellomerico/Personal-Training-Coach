@@ -69,6 +69,17 @@ function mapActivityType(raw: string): ActivityType {
   return ACTIVITY_TYPE_MAP[raw.toLowerCase()] ?? 'other';
 }
 
+function extractConnectorErrorDetail(body: string): string {
+  if (!body) return '';
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown };
+    if (typeof parsed.detail === 'string') return parsed.detail;
+  } catch {
+    // Nicht-JSON-Antworten unverändert durchreichen.
+  }
+  return body;
+}
+
 /**
  * TS-Client zum isolierten Python-Garmin-Connector. Implementiert das
  * gemeinsame {@link SourceConnector}-Interface; Analyse/UI bleiben provider-agnostisch.
@@ -211,8 +222,14 @@ export class GarminConnector implements SourceConnector {
     const res = await fetch(url, { headers });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      const detail = extractConnectorErrorDetail(body);
+      if (res.status === 401) {
+        throw new Error(
+          `Garmin-Session abgelaufen oder ungültig. Bitte erneut mit Garmin verbinden. ${detail}`.trim(),
+        );
+      }
       throw new Error(
-        `Garmin-Connector ${path} fehlgeschlagen: HTTP ${res.status} ${body}`.trim(),
+        `Garmin-Connector ${path} fehlgeschlagen: HTTP ${res.status} ${detail}`.trim(),
       );
     }
     const json: unknown = await res.json();

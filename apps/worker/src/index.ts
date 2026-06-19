@@ -3,6 +3,7 @@ import { createLogger, decryptJsonSecret, loadEnv } from "@ptc/config";
 import { GarminConnector } from "@ptc/connectors";
 import { prisma } from "@ptc/db";
 import {
+  assertGarminSessionForRealAccount,
   GARMIN_SYNC_QUEUE,
   runTrackedGarminSync,
   type GarminSyncJobData,
@@ -22,16 +23,20 @@ const log = createLogger("worker");
  * entschlüsselt zurück. Bei fehlenden/ungültigen Secrets wird ohne Session
  * gesynct (Stub-Pfad).
  */
-async function loadProviderSession(
-  providerAccountId: string,
-): Promise<Record<string, unknown> | undefined> {
-  const account = await prisma.providerAccount.findUnique({
+async function loadProviderAccount(providerAccountId: string) {
+  return prisma.providerAccount.findUnique({
     where: { id: providerAccountId },
-    select: { secrets: true },
+    select: { secrets: true, authMode: true },
   });
-  if (!account?.secrets) return undefined;
+}
+
+function decryptProviderSession(
+  providerAccountId: string,
+  secrets: string | null,
+): Record<string, unknown> | undefined {
+  if (!secrets) return undefined;
   try {
-    return decryptJsonSecret<Record<string, unknown>>(account.secrets);
+    return decryptJsonSecret<Record<string, unknown>>(secrets);
   } catch {
     log.warn({ providerAccountId }, "Garmin-Session nicht entschlüsselbar; Sync ohne Session.");
     return undefined;
@@ -48,9 +53,9 @@ async function main() {
   await boss.work<GarminSyncJobData>(GARMIN_SYNC_QUEUE, async (jobs) => {
     for (const job of jobs) {
       const { userId, providerAccountId, externalUserId, since, syncJobId } = job.data;
-      // Persistierte, verschlüsselte Session laden und entschlüsselt an den
-      // Connector geben – damit der echte Datenabruf prozessunabhängig läuft.
-      const session = await loadProviderSession(providerAccountId);
+      const account = await loadProviderAccount(providerAccountId);
+      const session = decryptProviderSession(providerAccountId, account?.secrets ?? null);
+      assertGarminSessionForRealAccount(account?.authMode, session);
       const connector = new GarminConnector(
         { baseUrl: env.GARMIN_CONNECTOR_URL, apiKey: env.INTERNAL_API_KEY, session },
         "garmin_unofficial",
