@@ -71,11 +71,17 @@ aufgerufen.
 
 **Real (nur mit eigenem Account testen)**
 
+Server/Connector einmal auf Real-Modus stellen (`.env` oder Shell):
+
 ```bash
-export GARMIN_STUB_MODE=false
-export GARMIN_EMAIL="..."
-export GARMIN_PASSWORD="..."
-# ENCRYPTION_KEY muss in .env gesetzt sein
+GARMIN_STUB_MODE=false
+```
+
+Zugangsdaten dann **im Web-Dashboard** eingeben (E-Mail + Passwort + MFA) — nicht
+mehr zwingend `GARMIN_EMAIL`/`GARMIN_PASSWORD` in der Umgebung. Env-Variablen
+bleiben als optionaler Fallback für lokale Admin-Setups.
+
+```bash
 pnpm dev:restart
 ```
 

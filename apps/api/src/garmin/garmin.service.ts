@@ -29,6 +29,12 @@ export interface ListQuery {
   limit?: number;
 }
 
+export interface GarminCapabilities {
+  stubMode: boolean;
+  providerMode: 'stub' | 'real';
+  webLoginSupported: boolean;
+}
+
 export interface GarminAuthStartResult {
   mode: 'stub' | 'real';
   mfaRequired: boolean;
@@ -83,7 +89,35 @@ export class GarminService {
     private readonly queue: QueueService,
   ) {}
 
-  async startAuth(body: { email?: string }): Promise<GarminAuthStartResult> {
+  async getCapabilities(): Promise<GarminCapabilities> {
+    try {
+      const res = await fetch(`${this.env.GARMIN_CONNECTOR_URL}/health`, {
+        signal: AbortSignal.timeout(3_000),
+        headers: { accept: 'application/json' },
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as {
+        stubMode?: boolean;
+        providerMode?: string;
+      };
+      const stubMode = json.stubMode !== false;
+      const providerMode = json.providerMode === 'real' ? 'real' : 'stub';
+      return {
+        stubMode,
+        providerMode,
+        webLoginSupported: providerMode === 'real',
+      };
+    } catch (err) {
+      this.logger.warn({ err }, 'Garmin-Connector-Capabilities nicht abrufbar');
+      throw new ServiceUnavailableException(
+        'Garmin-Connector ist nicht erreichbar. Läuft pnpm dev:all?',
+      );
+    }
+  }
+
+  async startAuth(body: { email?: string; password?: string }): Promise<GarminAuthStartResult> {
     return this.connector().startAuth(body);
   }
 

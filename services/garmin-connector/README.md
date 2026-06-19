@@ -40,13 +40,15 @@ Der Login ist implementiert. Manuelle Schritte zum lokalen Testen:
    ```
    In `requirements.txt` sind sie als Kommentar vermerkt; bewusst optional, damit
    der Stub-Betrieb schlank bleibt.
-2. Zugangsdaten **nur lokal** in der Umgebung setzen (niemals committen/loggen):
+2. Zugangsdaten **im Web-Dashboard** eingeben (empfohlen) oder optional lokal in der
+   Umgebung setzen (niemals committen/loggen):
    ```bash
    export GARMIN_EMAIL="..."
    export GARMIN_PASSWORD="..."
    ```
 3. Real-Modus aktivieren: `GARMIN_STUB_MODE=false`.
-4. Login-Flow (zweistufig, identisch zum Stub-HTTP-Interface):
+4. Im Web-Dashboard Garmin-E-Mail/Passwort eingeben und verbinden, oder den
+   Login-Flow per API auslösen:
    - `POST /auth/start` → startet den `garminconnect`-Login mit den Umgebungs-Zugangsdaten.
      Verlangt Garmin MFA, kommt `mfaRequired: true` + eine `challengeId` zurück.
    - `POST /auth/complete` mit `challengeId` + `mfaCode` (der von Garmin per

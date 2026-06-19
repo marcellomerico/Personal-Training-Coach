@@ -40,6 +40,7 @@ export interface GarminConnectorOptions {
 
 export interface GarminAuthStartInput {
   email?: string;
+  password?: string;
 }
 
 export interface GarminAuthCompleteInput {

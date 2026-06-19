@@ -5,6 +5,12 @@ export class GarminAuthStartDto {
   @IsEmail()
   @MaxLength(255)
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  password?: string;
 }
 
 export class GarminAuthCompleteDto {

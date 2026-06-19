@@ -3,6 +3,7 @@ import type {
   DailyHealthMetric,
   GarminAuthCompleteResult,
   GarminAuthStartResult,
+  GarminCapabilities,
   HealthStatus,
   ReadinessMetric,
   SafeUser,
@@ -112,7 +113,14 @@ export function getGarminStatus(): Promise<GarminConnectionStatus> {
   return request('/providers/garmin/status');
 }
 
-export function startGarminAuth(body: { email?: string }): Promise<GarminAuthStartResult> {
+export function getGarminCapabilities(): Promise<GarminCapabilities> {
+  return request('/providers/garmin/capabilities');
+}
+
+export function startGarminAuth(body: {
+  email?: string;
+  password?: string;
+}): Promise<GarminAuthStartResult> {
   return request('/providers/garmin/auth/start', {
     method: 'POST',
     body: JSON.stringify(body),

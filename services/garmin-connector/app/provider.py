@@ -7,9 +7,10 @@ zweistufigen start/complete-Flow) und gibt die Session-Tokens an die API
 zurück, die sie verschlüsselt in `provider_accounts.secrets` speichert.
 
 Sicherheit:
-- Zugangsdaten kommen ausschliesslich aus der Umgebung (GARMIN_EMAIL/
-  GARMIN_PASSWORD), nie über die HTTP-Schnittstelle.
-- Das Passwort wird **nicht** gespeichert und **nicht** geloggt.
+- Zugangsdaten kommen aus dem Web-Formular (auth/start) oder optional aus der
+  Umgebung (GARMIN_EMAIL/GARMIN_PASSWORD) als Fallback für lokale Admin-Setups.
+- Das Passwort wird **nicht** gespeichert, **nicht** geloggt und nur für
+  auth/start im Transit verwendet.
 - Datenabruf (activities/daily-health/sleep) nutzt die übergebene Session aus
   `provider_accounts.secrets` und läuft zustandslos pro Request.
 """
@@ -42,7 +43,7 @@ class GarminProvider(ABC):
     mode: str
 
     @abstractmethod
-    def start_auth(self, email: Optional[str]) -> dict: ...
+    def start_auth(self, email: Optional[str], password: Optional[str] = None) -> dict: ...
 
     @abstractmethod
     def complete_auth(self, challenge_id: str, mfa_code: str) -> dict: ...
@@ -62,7 +63,7 @@ class StubGarminProvider(GarminProvider):
 
     mode = "stub"
 
-    def start_auth(self, email: Optional[str]) -> dict:
+    def start_auth(self, email: Optional[str], password: Optional[str] = None) -> dict:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
         return {
             "mode": "stub",
@@ -115,7 +116,6 @@ class RealGarminProvider(GarminProvider):
 
     mode = "real"
     REQUIRED_PACKAGES = ("garminconnect",)
-    REQUIRED_CREDENTIALS = ("GARMIN_EMAIL", "GARMIN_PASSWORD")
     CHALLENGE_TTL_SEC = 10 * 60
 
     def __init__(self) -> None:
@@ -136,16 +136,27 @@ class RealGarminProvider(GarminProvider):
                     "Abschnitt 'Echter Login (garminconnect)')."
                 ),
             )
-        missing_creds = [k for k in self.REQUIRED_CREDENTIALS if not os.getenv(k)]
-        if missing_creds:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Garmin Real-Modus: Zugangsdaten fehlen "
-                    f"({', '.join(missing_creds)}). Nur lokal in der Umgebung "
-                    "setzen, niemals committen oder loggen."
-                ),
-            )
+
+    @staticmethod
+    def _resolve_credentials(email: Optional[str], password: Optional[str]) -> tuple[str, str]:
+        if email and password:
+            cleaned_email = email.strip()
+            if not cleaned_email:
+                raise HTTPException(status_code=400, detail="Garmin-E-Mail fehlt.")
+            return cleaned_email, password
+
+        env_email = os.getenv("GARMIN_EMAIL")
+        env_password = os.getenv("GARMIN_PASSWORD")
+        if env_email and env_password:
+            return env_email, env_password
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Garmin-Zugangsdaten fehlen. Bitte E-Mail und Passwort im "
+                "Web-Formular angeben oder lokal GARMIN_EMAIL/GARMIN_PASSWORD setzen."
+            ),
+        )
 
     def _prune_challenges(self) -> None:
         now = time.monotonic()
@@ -176,12 +187,10 @@ class RealGarminProvider(GarminProvider):
         value = display_name or username
         return str(value) if value else "garmin-user"
 
-    def start_auth(self, email: Optional[str]) -> dict:
+    def start_auth(self, email: Optional[str], password: Optional[str] = None) -> dict:
         self._ensure_ready()
         self._prune_challenges()
-        # Sicherheit: niemals HTTP-email als Credential übernehmen.
-        if email:
-            logger.info("Real-Login verwendet GARMIN_EMAIL aus Env; Request-email wird ignoriert.")
+        garmin_email, garmin_password = self._resolve_credentials(email, password)
 
         from garminconnect import Garmin
         from garminconnect import (
@@ -190,8 +199,6 @@ class RealGarminProvider(GarminProvider):
             GarminConnectTooManyRequestsError,
         )
 
-        garmin_email = os.environ["GARMIN_EMAIL"]
-        garmin_password = os.environ["GARMIN_PASSWORD"]
         garmin = Garmin(
             email=garmin_email,
             password=garmin_password,

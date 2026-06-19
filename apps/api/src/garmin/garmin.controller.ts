@@ -18,6 +18,11 @@ import { GarminAuthCompleteDto, GarminAuthStartDto } from './dto/garmin-auth.dto
 export class GarminController {
   constructor(private readonly garmin: GarminService) {}
 
+  @Get('providers/garmin/capabilities')
+  capabilities() {
+    return this.garmin.getCapabilities();
+  }
+
   @Post('providers/garmin/auth/start')
   @HttpCode(200)
   startAuth(@Body() body: GarminAuthStartDto) {

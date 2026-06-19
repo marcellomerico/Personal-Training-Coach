@@ -14,6 +14,7 @@ export function createLogger(name: string) {
         "*.access_token",
         "*.refresh_token",
         "*.password",
+        "*.garminPassword",
         "*.token",
         "req.headers.authorization",
       ],

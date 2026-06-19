@@ -10,6 +10,7 @@ import {
   getActivities,
   getCoachRecommendation,
   getDailyHealth,
+  getGarminCapabilities,
   getGarminStatus,
   getGarminSyncJobs,
   getHealth,
@@ -34,6 +35,7 @@ import type {
   CoachRecommendation,
   DailyHealthMetric,
   GarminConnectionStatus,
+  GarminCapabilities,
   ReadinessDecision,
   ReadinessMetric,
   SafeUser,
@@ -56,11 +58,14 @@ export default function DashboardPage() {
   const [recommendation, setRecommendation] = useState<CoachRecommendation | null>(null);
   const [syncJobs, setSyncJobs] = useState<SyncJobSummary[]>([]);
   const [garminStatus, setGarminStatus] = useState<GarminConnectionStatus | null>(null);
+  const [garminCapabilities, setGarminCapabilities] = useState<GarminCapabilities | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [garminChallengeId, setGarminChallengeId] = useState<string | null>(null);
-  const [garminMfaCode, setGarminMfaCode] = useState('000000');
+  const [garminEmail, setGarminEmail] = useState('');
+  const [garminPassword, setGarminPassword] = useState('');
+  const [garminMfaCode, setGarminMfaCode] = useState('');
   const [telegramToken, setTelegramToken] = useState<TelegramLinkToken | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -98,9 +103,17 @@ export default function DashboardPage() {
         const me = await getMe();
         if (!active) return;
         setUser(me.user);
+        setGarminEmail(me.user.email);
         getHealth()
           .then(() => active && setApiOk(true))
           .catch(() => active && setApiOk(false));
+        getGarminCapabilities()
+          .then((caps) => {
+            if (!active) return;
+            setGarminCapabilities(caps);
+            if (caps.stubMode) setGarminMfaCode('000000');
+          })
+          .catch(() => active && setGarminCapabilities(null));
         await loadData();
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
@@ -125,14 +138,52 @@ export default function DashboardPage() {
     }
   }
 
+  async function finishGarminConnect(challengeId: string, mfaCode: string) {
+    await completeGarminAuth({ challengeId, mfaCode });
+    setGarminChallengeId(null);
+    setGarminMfaCode(garminCapabilities?.stubMode ? '000000' : '');
+    await loadData();
+
+    setSyncing(true);
+    try {
+      const res = await syncGarmin();
+      const s: SyncStats = res.stats;
+      setNotice(
+        `Garmin verbunden und synchronisiert – Job ${res.syncJob.id}, Aktivitäten: ${s.activities}, Health: ${s.dailyHealth}, Schlaf: ${s.sleep}.`,
+      );
+      await loadData();
+    } catch (err) {
+      setNotice('Garmin verbunden. Erster Sync fehlgeschlagen – bitte manuell syncen.');
+      setError(err instanceof ApiError ? err.message : 'Sync nach Verbindung fehlgeschlagen');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function onConnect() {
     setError(null);
     setNotice(null);
     setConnecting(true);
     try {
-      const res = await startGarminAuth({ email: user?.email ?? undefined });
+      const realLogin = garminCapabilities?.webLoginSupported === true;
+      if (realLogin && (!garminEmail.trim() || !garminPassword)) {
+        throw new ApiError('Bitte Garmin-E-Mail und Passwort eingeben.', 400);
+      }
+
+      const res = await startGarminAuth({
+        email: garminEmail.trim() || undefined,
+        password: realLogin ? garminPassword : undefined,
+      });
+      setGarminPassword('');
       setGarminChallengeId(res.challengeId);
-      setNotice(`${res.message} Danach MFA bestätigen.`);
+      setNotice(res.message);
+
+      if (!res.mfaRequired) {
+        await finishGarminConnect(res.challengeId, '0000');
+        return;
+      }
+
+      setNotice(`${res.message} Gib den Code von Garmin ein und bestätige.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Garmin-Auth konnte nicht gestartet werden');
     } finally {
@@ -146,11 +197,7 @@ export default function DashboardPage() {
     setNotice(null);
     setConnecting(true);
     try {
-      await completeGarminAuth({ challengeId: garminChallengeId, mfaCode: garminMfaCode });
-      setGarminChallengeId(null);
-      // Status sofort nachladen, damit "Garmin verbunden" auch ohne Sync erscheint.
-      await loadData();
-      setNotice('Garmin verbunden (Stub-MFA abgeschlossen). Jetzt Sync starten.');
+      await finishGarminConnect(garminChallengeId, garminMfaCode);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Garmin-MFA fehlgeschlagen');
     } finally {
@@ -320,7 +367,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Garmin-Aktionen (Stub) */}
+        {/* Garmin-Aktionen */}
         <div className="card">
           <div className="card-title">Garmin</div>
           <p style={{ marginTop: 0, marginBottom: 8 }}>
@@ -328,6 +375,12 @@ export default function DashboardPage() {
             {garminConnected ? 'Verbunden' : 'Nicht verbunden'}
             {garminStatus?.authMode ? (
               <span className="muted"> · {garminStatus.authMode}</span>
+            ) : null}
+            {garminCapabilities ? (
+              <span className="muted">
+                {' '}
+                · Connector: {garminCapabilities.stubMode ? 'Stub' : 'Real'}
+              </span>
             ) : null}
           </p>
           {garminStatus?.connectedAt && (
@@ -337,26 +390,64 @@ export default function DashboardPage() {
             </div>
           )}
           <p className="muted" style={{ marginTop: 4, marginBottom: 12 }}>
-            {!garminStatus?.authMode || garminStatus.authMode.includes('stub') ? (
-              <>Stub-Modus: Auth starten → MFA bestätigen (Stub-Code <code>000000</code>) → Sync.</>
+            {garminCapabilities?.webLoginSupported ? (
+              <>
+                Garmin-Connect-Zugangsdaten eingeben → MFA-Code von Garmin → automatischer
+                Sync.
+              </>
             ) : (
-              <>Real-Modus: Auth starten → MFA-Code von Garmin bestätigen → Sync.</>
+              <>
+                Stub-Modus: Auth starten → MFA bestätigen (Stub-Code <code>000000</code>) →
+                automatischer Sync.
+              </>
             )}
           </p>
+          {garminCapabilities?.webLoginSupported && !garminChallengeId && (
+            <div className="stack" style={{ marginBottom: 12, maxWidth: 360 }}>
+              <label className="stack" style={{ gap: 4 }}>
+                <span className="muted" style={{ fontSize: 13 }}>
+                  Garmin E-Mail
+                </span>
+                <input
+                  type="email"
+                  autoComplete="username"
+                  value={garminEmail}
+                  onChange={(event) => setGarminEmail(event.target.value)}
+                  disabled={connecting || syncing}
+                />
+              </label>
+              <label className="stack" style={{ gap: 4 }}>
+                <span className="muted" style={{ fontSize: 13 }}>
+                  Garmin Passwort
+                </span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={garminPassword}
+                  onChange={(event) => setGarminPassword(event.target.value)}
+                  disabled={connecting || syncing}
+                />
+              </label>
+            </div>
+          )}
           <div className="row">
-            <button onClick={onConnect} disabled={connecting}>
-              {connecting ? 'Starte …' : '1 · Auth starten'}
+            <button
+              onClick={onConnect}
+              disabled={connecting || syncing || Boolean(garminChallengeId)}
+            >
+              {connecting ? 'Starte …' : garminChallengeId ? 'Auth läuft …' : '1 · Mit Garmin verbinden'}
             </button>
             {garminChallengeId && (
               <>
                 <input
                   aria-label="Garmin MFA-Code"
+                  placeholder={garminCapabilities?.stubMode ? '000000' : 'MFA-Code'}
                   value={garminMfaCode}
                   onChange={(event) => setGarminMfaCode(event.target.value)}
                   maxLength={12}
                   style={{ maxWidth: 140 }}
                 />
-                <button onClick={onCompleteGarminAuth} disabled={connecting || !garminMfaCode}>
+                <button onClick={onCompleteGarminAuth} disabled={connecting || syncing || !garminMfaCode}>
                   2 · MFA bestätigen
                 </button>
               </>

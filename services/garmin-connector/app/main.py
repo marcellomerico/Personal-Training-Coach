@@ -30,6 +30,7 @@ provider = get_provider()
 
 class AuthStartRequest(BaseModel):
     email: Optional[str] = None
+    password: Optional[str] = Field(default=None, min_length=1, max_length=256)
 
 
 class AuthCompleteRequest(BaseModel):
@@ -56,7 +57,7 @@ def health() -> dict:
 
 @app.post("/auth/start", dependencies=[Depends(require_internal_key)])
 def start_auth(body: AuthStartRequest) -> dict:
-    return provider.start_auth(body.email)
+    return provider.start_auth(body.email, body.password)
 
 
 @app.post("/auth/complete", dependencies=[Depends(require_internal_key)])

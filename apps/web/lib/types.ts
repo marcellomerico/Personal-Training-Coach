@@ -87,6 +87,12 @@ export interface HealthStatus {
   time: string;
 }
 
+export interface GarminCapabilities {
+  stubMode: boolean;
+  providerMode: 'stub' | 'real';
+  webLoginSupported: boolean;
+}
+
 export interface GarminAuthStartResult {
   mode: 'stub' | 'real';
   mfaRequired: boolean;
