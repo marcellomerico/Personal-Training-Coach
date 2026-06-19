@@ -69,28 +69,54 @@ def _gmt_to_iso(value: Any) -> Optional[str]:
 def make_client(session: dict) -> Any:
     """Stellt einen garminconnect-Client aus der übergebenen Session her.
 
-    Die Session ist die von der API entschlüsselte `provider_accounts.secrets`
-    (z. B. ein garth-Token-String). Sie wird hier **nicht** aus globalem
-    Prozess-State gelesen, sondern pro Request übergeben – damit ist der
-    Datenabruf zustandslos und prozess-/worker-unabhängig.
-
-    TODO(garmin-real-login): an die verifizierte garminconnect-API anbinden
-    (z. B. `Garmin(); client.garth.loads(token)` bzw. Tokenstore-Login der
-    aktuellen Library-Version). Bewusst noch nicht aktiv, damit kein
-    ungetesteter, falscher Library-Aufruf ausgeführt wird. Das Mapping unten ist
-    fertig und unit-getestet; nur die Session-Wiederherstellung fehlt.
+    Erwartet `session` aus den entschlüsselten Provider-Secrets:
+    {
+      "mode": "real",
+      "provider": "garminconnect",
+      "session": "<token-string aus client.dumps()>"
+    }
     """
     from fastapi import HTTPException
+    from garminconnect import Garmin
 
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "Garmin Real-Datenabruf: Session-Wiederherstellung ist noch nicht an "
-            "die verifizierte garminconnect-API angebunden (TODO). Die "
-            "Session-Übergabe-Architektur steht; bitte lokal mit echtem Account "
-            "implementieren/testen."
-        ),
-    )
+    token = session.get("session") if isinstance(session, dict) else None
+    if not isinstance(token, str) or not token.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Garmin-Session ist ungültig oder fehlt (session-token).",
+        )
+
+    garmin = Garmin()
+
+    # API-Drift tolerant behandeln: je nach Version liegt der HTTP-Client auf
+    # `garmin.client` oder auf `garmin.garth`.
+    restored = False
+    errors: list[str] = []
+
+    client_obj = getattr(garmin, "client", None)
+    if client_obj is not None and hasattr(client_obj, "loads"):
+        try:
+            client_obj.loads(token)
+            restored = True
+        except Exception as err:  # noqa: BLE001
+            errors.append(type(err).__name__)
+
+    if not restored:
+        garth_obj = getattr(garmin, "garth", None)
+        if garth_obj is not None and hasattr(garth_obj, "loads"):
+            try:
+                garth_obj.loads(token)
+                restored = True
+            except Exception as err:  # noqa: BLE001
+                errors.append(type(err).__name__)
+
+    if not restored:
+        detail = "Garmin-Session konnte nicht wiederhergestellt werden."
+        if errors:
+            detail = f"{detail} ({', '.join(errors[:2])})"
+        raise HTTPException(status_code=401, detail=detail)
+
+    return garmin
 
 
 # --- Aktivitäten -----------------------------------------------------------
