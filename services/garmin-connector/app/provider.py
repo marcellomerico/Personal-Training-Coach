@@ -2,7 +2,7 @@
 
 Die HTTP-Endpunkte bedienen ein gemeinsames Interface, egal ob Stub- oder
 echter Modus. Der Stub liefert deterministische Testdaten. Der Real-Provider
-führt den echten Garmin-Login über `garth` aus (inkl. MFA/2FA über den
+führt den echten Garmin-Login über `garminconnect` aus (inkl. MFA/2FA über den
 zweistufigen start/complete-Flow) und gibt die Session-Tokens an die API
 zurück, die sie verschlüsselt in `provider_accounts.secrets` speichert.
 
@@ -10,8 +10,8 @@ Sicherheit:
 - Zugangsdaten kommen ausschliesslich aus der Umgebung (GARMIN_EMAIL/
   GARMIN_PASSWORD), nie über die HTTP-Schnittstelle.
 - Das Passwort wird **nicht** gespeichert und **nicht** geloggt.
-- Datenabruf (activities/daily-health/sleep) im Real-Modus folgt separat
-  (feat/garmin-real-data-mapping).
+- Datenabruf (activities/daily-health/sleep) nutzt die übergebene Session aus
+  `provider_accounts.secrets` und läuft zustandslos pro Request.
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ class RealGarminProvider(GarminProvider):
         self.missing_packages = [
             pkg for pkg in self.REQUIRED_PACKAGES if importlib.util.find_spec(pkg) is None
         ]
-        # In-Memory MFA-Challenges (prozesslokal; siehe Risiko-Hinweis in Review).
+        # In-Memory MFA-Challenges (prozesslokal; bei multi-worker ggf. externisieren).
         self._challenges: dict[str, dict] = {}
 
     def _ensure_ready(self) -> None:
@@ -133,7 +133,7 @@ class RealGarminProvider(GarminProvider):
                     "Garmin Real-Modus nicht einsatzbereit: Python-Pakete "
                     f"{', '.join(self.missing_packages)} sind nicht installiert. "
                     "In services/garmin-connector installieren (siehe README, "
-                    "Abschnitt 'Echter Login (garth/garminconnect)')."
+                    "Abschnitt 'Echter Login (garminconnect)')."
                 ),
             )
         missing_creds = [k for k in self.REQUIRED_CREDENTIALS if not os.getenv(k)]
@@ -314,8 +314,6 @@ class RealGarminProvider(GarminProvider):
 
         session = self._require_session(session)
         # make_client stellt die garminconnect-Session aus `session` wieder her.
-        # Die konkrete Library-Anbindung ist noch TODO (siehe real_garmin); bis
-        # dahin liefert sie einen kontrollierten 501. Mapping ist bereits aktiv.
         client = real_garmin.make_client(session)
         fetchers = {
             "activities": real_garmin.fetch_activities,

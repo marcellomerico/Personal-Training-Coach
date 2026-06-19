@@ -3,9 +3,8 @@
 Isolierter Connector für die **primäre** Datenquelle Garmin (inoffiziell,
 `garminconnect`). Liefert normalisierte Daten an den TS-Kern (interne API/DB).
 
-> Status: **Stub + Real-Login implementiert.** Der echte Datenabruf ist
-> strukturell vorbereitet, die Session-Wiederherstellung für `garminconnect`
-> im Datenpfad ist noch als TODO markiert.
+> Status: **Stub + Real-Login + Real-Datenabruf implementiert.** Für echten
+> Produktivbetrieb sind weiterhin lokale E2E-Tests mit echtem Garmin-Account nötig.
 
 ## Provider-Modi (Stub vs. Real)
 
@@ -22,10 +21,8 @@ Die Endpunkte delegieren an einen Provider (`app/provider.py`), gesteuert über
     fehlschlägt.
 
 Der Datenabruf (`/activities`, `/daily-health`, `/sleep`) ist im Real-Modus
-gemappt (`app/real_garmin.py`) und auf dieselben Schemas wie der Stub
-normalisiert. Die konkrete Session-Wiederherstellung für `garminconnect` ist
-noch TODO, deshalb liefern diese Endpunkte im Real-Modus aktuell kontrolliert
-`501`, bis der letzte Integrationsschritt abgeschlossen ist.
+gemappt (`app/real_garmin.py`), auf dieselben Schemas wie der Stub normalisiert
+und stellt die Session pro Request aus `provider_accounts.secrets` wieder her.
 
 ## Stub-Endpunkte
 - `POST /auth/start` startet eine MFA-Challenge. Im Stub-Modus lautet der Code `000000`.
@@ -64,9 +61,9 @@ Der Login ist implementiert. Manuelle Schritte zum lokalen Testen:
 > Sync bitte die gemappten Werte gegenprüfen.
 
 ## Geplant
-- Real-Datenabruf finalisieren: Session aus `secrets` für `garminconnect`
-  wiederherstellen (statt TODO-501).
 - Token-Refresh und robuste Fehlerzustände für abgelaufene Garmin-Sessions.
+- Optionale Persistenz für MFA-Challenges (statt reinem In-Memory-Store) bei
+  multi-worker Betrieb.
 - Läuft als eigener Container (siehe `docker-compose.yml`, folgt in Phase 2).
 
 ## Hinweise
