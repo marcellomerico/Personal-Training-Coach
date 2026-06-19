@@ -16,9 +16,13 @@ from pydantic import BaseModel, Field
 
 from .provider import get_provider, is_stub_mode
 
+import time
+
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 
 app = FastAPI(title="garmin-connector", version="0.3.0")
+
+_STARTED_AT = time.time()
 
 # Provider einmal beim Start anhand GARMIN_STUB_MODE auswählen.
 provider = get_provider()
@@ -46,6 +50,7 @@ def health() -> dict:
         "service": "garmin-connector",
         "stubMode": is_stub_mode(),
         "providerMode": provider.mode,
+        "uptimeSec": int(time.time() - _STARTED_AT),
     }
 
 
