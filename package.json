@@ -18,6 +18,7 @@
     "dev:bot": "turbo run dev --filter=@ptc/bot",
     "dev:worker": "turbo run dev --filter=@ptc/worker",
     "dev:web": "turbo run dev --filter=@ptc/web",
+    "ops:health": "bash scripts/health-check.sh",
     "db:generate": "pnpm --filter @ptc/db generate",
     "db:migrate": "pnpm --filter @ptc/db migrate",
     "format": "prettier --write ."

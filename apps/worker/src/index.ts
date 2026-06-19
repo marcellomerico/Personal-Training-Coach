@@ -47,8 +47,26 @@ async function main() {
   const boss = new PgBoss(env.DATABASE_URL);
   boss.on("error", (err) => log.error(err));
 
+  const shutdown = async (signal: string) => {
+    log.info({ signal }, "Worker shutdown");
+    await boss.stop({ graceful: true, timeout: 10_000 });
+    await prisma.$disconnect();
+    process.exit(0);
+  };
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
+
   await boss.start();
   await boss.createQueue(GARMIN_SYNC_QUEUE);
+
+  log.info(
+    {
+      queue: GARMIN_SYNC_QUEUE,
+      garminConnectorUrl: env.GARMIN_CONNECTOR_URL,
+      nodeEnv: env.NODE_ENV,
+    },
+    "Worker gestartet (pg-boss)",
+  );
 
   await boss.work<GarminSyncJobData>(GARMIN_SYNC_QUEUE, async (jobs) => {
     for (const job of jobs) {
@@ -79,7 +97,7 @@ async function main() {
     }
   });
 
-  log.info(`Worker gestartet (pg-boss). Queue '${GARMIN_SYNC_QUEUE}' registriert.`);
+  log.info(`Queue '${GARMIN_SYNC_QUEUE}' registriert.`);
 }
 
 void main();

@@ -1,4 +1,5 @@
 import { pino } from "pino";
+import { loadEnv } from "./env";
 
 /**
  * Gemeinsamer strukturierter Logger. Sensible Felder werden redigiert,
@@ -7,7 +8,7 @@ import { pino } from "pino";
 export function createLogger(name: string) {
   return pino({
     name,
-    level: process.env.LOG_LEVEL ?? "info",
+    level: loadEnv().LOG_LEVEL,
     redact: {
       paths: [
         "*.access_token",
