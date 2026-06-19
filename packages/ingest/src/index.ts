@@ -8,6 +8,13 @@ export {
   computeAndStoreReadinessHistory,
   DEFAULT_READINESS_HISTORY_DAYS,
 } from './readiness';
+export {
+  assertGarminSessionForRealAccount,
+  GARMIN_REAL_AUTH_MODE,
+  GarminSessionRequiredError,
+  hasGarminSessionToken,
+  isRealGarminAuthMode,
+} from './garmin-session';
 
 export interface SyncContext {
   userId: string;

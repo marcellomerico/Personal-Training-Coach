@@ -11,7 +11,12 @@ import {
   SecretEncryptionError,
 } from '@ptc/config';
 import { GarminConnector } from '@ptc/connectors';
-import { runTrackedGarminSync, type SyncStats } from '@ptc/ingest';
+import {
+  assertGarminSessionForRealAccount,
+  GarminSessionRequiredError,
+  runTrackedGarminSync,
+  type SyncStats,
+} from '@ptc/ingest';
 import { Prisma, type ProviderAccount, type SyncJob } from '@ptc/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -178,9 +183,19 @@ export class GarminService {
       );
     }
 
+    const session = this.decryptSession(account);
+    try {
+      assertGarminSessionForRealAccount(account.authMode, session);
+    } catch (err) {
+      if (err instanceof GarminSessionRequiredError) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
+
     const result = await runTrackedGarminSync(
       this.prisma,
-      this.connector(this.decryptSession(account)),
+      this.connector(session),
       {
         userId,
         providerAccountId: account.id,
@@ -315,6 +330,7 @@ export class GarminService {
    * Entschlüsselt die in `provider_accounts.secrets` abgelegte Session, damit
    * der Connector sie beim echten Datenabruf an den Python-Service weiterreicht.
    * Bei fehlenden/ungültigen Secrets wird ohne Session gesynct (Stub-Pfad).
+   * Real-Accounts (`unofficial_real`) werden vor dem Sync separat geprüft.
    */
   private decryptSession(account: ProviderAccount): Record<string, unknown> | undefined {
     if (!account.secrets) return undefined;
